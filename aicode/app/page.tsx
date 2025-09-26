@@ -395,12 +395,12 @@ export default function Home() {
               </div>
               <div className="text-center">
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  {isLoading ? "Transcribing your file..." : "Creating karaoke data..."}
+                  {isLoading ? "Transcribing your file..." : "Creating Video data..."}
                 </h3>
                 <p className="text-gray-600 mb-1">
                   {isLoading 
                     ? `AI is transcribing your ${file?.type?.includes("video") ? "video" : "audio"} content`
-                    : "Processing timing information for karaoke mode..."
+                    : "Processing timing information for Video mode..."
                   }
                 </p>
                 <p className="text-sm text-gray-500">
@@ -436,7 +436,7 @@ export default function Home() {
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold flex items-center space-x-3">
                   <Video className="w-6 h-6 text-purple-300" />
-                  <span>Karaoke Mode</span>
+                  <span>Video</span>
                 </h2>
                 <div className="flex space-x-3">
                  
