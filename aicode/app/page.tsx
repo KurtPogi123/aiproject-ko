@@ -358,39 +358,29 @@ export default function Home() {
 
               {!isLoading && !isProcessingVideo && (
                 <div className="flex justify-center space-x-4 flex-wrap gap-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleUpload();
-                    }}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center space-x-2 shadow-md hover:shadow-lg"
-                  >
-                    <CheckCircle className="w-5 h-5" />
-                    <span>Get Transcript</span>
-                  </button>
-                  
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCreateSubtitledVideo();
-                    }}
-                    className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-semibold flex items-center space-x-2 shadow-md hover:shadow-lg"
-                  >
-                    <Video className="w-5 h-5" />
-                    <span>Create Karaoke Video</span>
-                  </button>
-                  
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeFile();
-                    }}
-                    className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Remove</span>
-                  </button>
-                </div>
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      handleUpload();
+    }}
+    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center space-x-2 shadow-md hover:shadow-lg"
+  >
+    <CheckCircle className="w-5 h-5" />
+    <span>Get Transcript</span>
+  </button>
+  
+  <button
+    onClick={(e) => {
+      e.stopPropagation();
+      removeFile();
+    }}
+    className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
+  >
+    <Trash2 className="w-4 h-4" />
+    <span>Remove</span>
+  </button>
+</div>
+
               )}
             </div>
           )}
@@ -449,13 +439,7 @@ export default function Home() {
                   <span>Karaoke Mode</span>
                 </h2>
                 <div className="flex space-x-3">
-                  <button
-                    onClick={handleDownloadSRT}
-                    className="bg-white bg-opacity-20 hover:bg-opacity-30 px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>SRT File</span>
-                  </button>
+                 
                   {file?.type.startsWith('video/') && (
                     <button
                       onClick={handleDownloadKaraokeVideo}
@@ -518,57 +502,37 @@ export default function Home() {
               </div>
             </div>
             <div className="p-6">
-              <div className="flex flex-col lg:flex-row gap-6">
-                {file && file.type.startsWith("video/") && videoUrl && (
-                  <div className="lg:w-1/2">
-                    <video
-                      src={videoUrl}
-                      controls
-                      className="w-full rounded-xl shadow-md"
-                      style={{ maxHeight: "384px" }}
-                    />
-                  </div>
-                )}
-                <div
-                  className={`${
-                    file && file.type.startsWith("video/") ? "lg:w-1/2" : "w-full"
-                  } space-y-4`}
-                >
-                  {/* Segments with timestamps */}
-                  {segments.length > 0 && (
-                    <div className="bg-gray-50 rounded-xl p-4 max-h-96 overflow-y-auto">
-                      <h3 className="font-semibold text-gray-800 mb-3">Timed Segments</h3>
-                      <div className="space-y-2">
-                        {segments.map((segment, index) => (
-                          <div 
-                            key={index} 
-                            className={`flex items-start space-x-3 p-2 rounded transition-colors ${
-                              index === currentSegment ? 'bg-purple-100 border-l-4 border-purple-500' : 'hover:bg-gray-100'
-                            }`}
-                          >
-                            <span className="text-xs text-gray-500 font-mono bg-gray-200 px-2 py-1 rounded">
-                              {formatTime(segment.start)}
-                            </span>
-                            <span className={`flex-1 ${
-                              index === currentSegment ? 'text-purple-800 font-semibold' : 'text-gray-800'
-                            }`}>
-                              {segment.text.trim()}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Full transcript */}
-                  <div className="bg-gray-50 rounded-xl p-6">
-                    <h3 className="font-semibold text-gray-800 mb-3">Full Transcript</h3>
-                    <pre className="whitespace-pre-wrap text-gray-900 leading-relaxed font-sans">
-                      {transcript}
-                    </pre>
-                  </div>
-                </div>
-              </div>
+
+              <div className="w-full space-y-4">
+  {/* Segments with timestamps */}
+  {segments.length > 0 && (
+    <div className="bg-gray-50 rounded-xl p-4 max-h-96 overflow-y-auto">
+      <h3 className="font-semibold text-gray-800 mb-3">Timed Segments</h3>
+      <div className="space-y-2">
+        {segments.map((segment, index) => (
+          <div 
+            key={index} 
+            className={`flex items-start space-x-3 p-2 rounded transition-colors ${
+              index === currentSegment ? 'bg-purple-100 border-l-4 border-purple-500' : 'hover:bg-gray-100'
+            }`}
+          >
+            <span className="text-xs text-gray-500 font-mono bg-gray-200 px-2 py-1 rounded">
+              {formatTime(segment.start)}
+            </span>
+            <span className={`flex-1 ${
+              index === currentSegment ? 'text-purple-800 font-semibold' : 'text-gray-800'
+            }`}>
+              {segment.text.trim()}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+  
+ 
+</div>
+
             </div>
           </div>
         )}
