@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, SetStateAction } from "react";
 import {
   Upload,
   Video,
@@ -58,23 +58,24 @@ export default function Home() {
     }
   }, [file]);
 
-  
+  const [currentWordWindow, setCurrentWordWindow] = useState<WordData[]>([]);
 
   // UPDATED: Enhanced time update handler for word-level highlighting
   const handleTimeUpdate = () => {
     if (videoRef.current && segments.length > 0) {
       const currentTime = videoRef.current.currentTime;
-      
+
       // Find current segment
       const activeSegmentIndex = segments.findIndex(
         (segment) => currentTime >= segment.start && currentTime <= segment.end
       );
       setCurrentSegment(activeSegmentIndex);
 
-      // Find current word
+      // Find current word and create a window of 5-6 words
       if (wordSegments.length > 0) {
         let foundWord = null;
-        
+        let wordWindow: SetStateAction<WordData[]> = [];
+
         for (let segIndex = 0; segIndex < wordSegments.length; segIndex++) {
           const segment = wordSegments[segIndex];
           if (segment.words && segment.words.length > 0) {
@@ -82,14 +83,41 @@ export default function Home() {
               const word = segment.words[wordIndex];
               if (currentTime >= word.start && currentTime <= word.end) {
                 foundWord = { segmentIndex: segIndex, wordIndex };
+
+                // Create a window of 5-6 words centered around the current word
+                const windowSize = 6; // Target 5-6 words
+                const wordsBefore = Math.floor(windowSize / 2); // e.g., 3 words before
+                const wordsAfter = windowSize - wordsBefore - 1; // e.g., 2 words after
+
+                // Calculate start and end indices for the window
+                let startIndex = Math.max(0, wordIndex - wordsBefore);
+                let endIndex = Math.min(segment.words.length, wordIndex + wordsAfter + 1);
+
+                // Adjust if we don't have enough words in the current segment
+                if (endIndex - startIndex < windowSize && segIndex < wordSegments.length - 1) {
+                  // Try to pull words from the next segment
+                  const nextSegment = wordSegments[segIndex + 1];
+                  if (nextSegment?.words) {
+                    const additionalWords = nextSegment.words.slice(0, windowSize - (endIndex - startIndex));
+                    wordWindow = [
+                      ...segment.words.slice(startIndex, endIndex),
+                      ...additionalWords,
+                    ];
+                  } else {
+                    wordWindow = segment.words.slice(startIndex, endIndex);
+                  }
+                } else {
+                  wordWindow = segment.words.slice(startIndex, endIndex);
+                }
                 break;
               }
             }
           }
           if (foundWord) break;
         }
-        
+
         setCurrentWord(foundWord);
+        setCurrentWordWindow(wordWindow);
       }
     }
   };
@@ -573,81 +601,72 @@ export default function Home() {
 
         {/* Karaoke Video with Live Captions */}
         {segments.length > 0 && file && file.type.startsWith("video/") && videoUrl && (
-          <div className="mt-8 bg-white rounded-2xl shadow-lg overflow-hidden">
-            <div className="bg-purple-900 text-white p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold flex items-center space-x-3">
-                  <Video className="w-6 h-6 text-purple-300" />
-                  <span>Video with Word-Level Captions</span>
-                </h2>
-                <div className="flex flex-wrap gap-2">
-                  {file?.type.startsWith('video/') && (
-                    <>
-                      
-                      
-                     
-                      
-                      <button
-                        onClick={handleDownloadAdvancedWordKaraoke}
-                        disabled={isProcessingVideo}
-                        className="bg-green-600 hover:bg-green-700 disabled:opacity-50 px-3 py-2 rounded-lg transition-colors flex items-center space-x-2 text-sm"
-                      >
-                        {isProcessingVideo ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Download className="w-4 h-4" />
-                        )}
-                        <span>Download</span>
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-              
-              {/* Download Options Explanation */}
-              
-            </div>
-            <div className="p-6">
-              <div className="relative">
-                <video
-                  ref={videoRef}
-                  src={videoUrl}
-                  controls
-                  className="w-full rounded-xl shadow-md"
-                  style={{ maxHeight: "500px" }}
-                  onTimeUpdate={handleTimeUpdate}
-                />
-                
-                {/* Enhanced Live Caption Overlay with Word Highlighting */}
-                {currentSegment >= 0 && segments[currentSegment] && (
-                  <div className="absolute bottom-20 left-0 right-0 text-center px-4">
-                    <div className="inline-block bg-black bg-opacity-90 text-white px-6 py-4 rounded-lg text-lg font-semibold max-w-5xl">
-                      {currentWord && wordSegments[currentWord.segmentIndex] ? (
-                        // Render words with current word highlighted
-                        <div className="flex flex-wrap justify-center gap-1">
-                          {wordSegments[currentWord.segmentIndex].words.map((word, index) => (
-                            <span
-                              key={index}
-                              className={`transition-all duration-200 ${
-                                index === currentWord.wordIndex
-                                  ? 'bg-yellow-400 text-black px-1 rounded transform scale-110'
-                                  : 'text-white'
-                              }`}
-                            >
-                              {word.word}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        segments[currentSegment].text
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+      <div className="mt-8 bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div className="bg-purple-900 text-white p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold flex items-center space-x-3">
+              <Video className="w-6 h-6 text-purple-300" />
+              <span>Video with Word-Level Captions</span>
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {file?.type.startsWith('video/') && (
+                <>
+                  <button
+                    onClick={handleDownloadAdvancedWordKaraoke}
+                    disabled={isProcessingVideo}
+                    className="bg-green-600 hover:bg-green-700 disabled:opacity-50 px-3 py-2 rounded-lg transition-colors flex items-center space-x-2 text-sm"
+                  >
+                    {isProcessingVideo ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    <span>Download</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
-        )}
+        </div>
+        <div className="p-6">
+          <div className="relative">
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              controls
+              className="w-full rounded-xl shadow-md"
+              style={{ maxHeight: "500px" }}
+              onTimeUpdate={handleTimeUpdate}
+            />
+            
+            {/* UPDATED: Live Caption Overlay with Word Window */}
+            {currentSegment >= 0 && segments[currentSegment] && currentWordWindow.length > 0 && (
+              <div className="absolute bottom-20 left-0 right-0 text-center px-4">
+                <div className="inline-block bg-black bg-opacity-90 text-white px-6 py-4 rounded-lg text-lg font-semibold max-w-5xl">
+                  <div className="flex flex-wrap justify-center gap-1">
+                    {currentWordWindow.map((word, index) => {
+                      const isCurrentWord = currentWord && wordSegments[currentWord.segmentIndex]?.words[currentWord.wordIndex]?.word === word.word;
+                      return (
+                        <span
+                          key={index}
+                          className={`transition-all duration-200 ${
+                            isCurrentWord
+                              ? 'bg-yellow-400 text-black px-1 rounded transform scale-110'
+                              : 'text-white'
+                          }`}
+                        >
+                          {word.word}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
 
         {/* Word-Level Transcript with Highlighting */}
         {transcript && !isLoading && (

@@ -497,7 +497,7 @@ async def create_simple_word_karaoke_video(input_path: str, all_words: list, out
 @app.post("/create-advanced-word-karaoke")
 async def create_advanced_word_karaoke(file: UploadFile = File(...)):
     """
-    Advanced word-level karaoke with better positioning and animations
+    Advanced word-level karaoke with 5-6 word windows and highlighting to match frontend
     """
     input_path = None
     subtitle_file = None
@@ -519,9 +519,9 @@ async def create_advanced_word_karaoke(file: UploadFile = File(...)):
         if not segments_list:
             return {"error": "No speech detected"}
 
-        # Create ASS subtitle file for better control
+        # Create ASS subtitle file with windowed karaoke
         subtitle_file = f"advanced_subs_{os.getpid()}.ass"
-        ass_content = create_word_level_ass_subtitle(segments_list)
+        ass_content = create_windowed_word_level_ass_subtitle(segments_list)
         
         with open(subtitle_file, 'w', encoding='utf-8') as f:
             f.write(ass_content)
@@ -529,7 +529,10 @@ async def create_advanced_word_karaoke(file: UploadFile = File(...)):
         output_path = f"advanced_output_{os.getpid()}.mp4"
         ffmpeg_path = "C:/ffmpeg/ffmpeg.exe"
 
-        # Use ASS subtitles for better word-level control
+        if not os.path.exists(ffmpeg_path):
+            return {"error": "FFmpeg not found"}
+
+        # Use ASS subtitles with libass for rendering
         command = [
             ffmpeg_path,
             "-i", input_path,
@@ -542,16 +545,15 @@ async def create_advanced_word_karaoke(file: UploadFile = File(...)):
             output_path
         ]
 
-        print("Creating advanced word-level karaoke...")
+        print("Running FFmpeg command:", " ".join(command))
         result = subprocess.run(command, capture_output=True, text=True, timeout=900)
 
         if result.returncode != 0:
-            print(f"Advanced processing failed: {result.stderr}")
-            # Fallback to simple method
-            return await create_word_level_karaoke_video(file)
+            print(f"FFmpeg error: {result.stderr[-1000:]}")
+            return {"error": f"FFmpeg processing failed: {result.stderr[-500:]}"}
 
         if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
-            return {"error": "Advanced processing failed"}
+            return {"error": "Output file not created or too small"}
 
         return FileResponse(
             output_path,
@@ -561,6 +563,7 @@ async def create_advanced_word_karaoke(file: UploadFile = File(...)):
         )
 
     except Exception as e:
+        print(f"Error: {str(e)}")
         return {"error": f"Advanced processing failed: {str(e)}"}
     
     finally:
@@ -571,39 +574,55 @@ async def create_advanced_word_karaoke(file: UploadFile = File(...)):
                 except:
                     pass
 
-def create_word_level_ass_subtitle(segments_list):
+def create_windowed_word_level_ass_subtitle(segments_list):
     """
-    Create ASS subtitle format for word-level karaoke effects
+    Create ASS subtitle with 5-6 word windows and karaoke-style highlighting
     """
     ass_header = """[Script Info]
-Title: Word-Level Karaoke
+Title: Windowed Word-Level Karaoke
 ScriptType: v4.00+
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,28,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,2,10,10,30,1
-Style: Highlight,Arial,30,&H0000FFFF,&H000000FF,&H00FF0000,&H00000000,1,0,0,0,100,100,0,0,1,3,0,2,10,10,30,1
+Style: Default,Arial,28,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,2,2,10,10,30,1
+Style: Highlight,Arial,30,&H0000FFFF,&H00FFFFFF,&H00000000,&H0000FFFF,1,0,0,0,100,100,0,0,1,2,2,2,10,10,30,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     
     events = []
+    window_size = 6  # Match frontend: 5-6 words per window
     
     for segment in segments_list:
         if hasattr(segment, 'words') and segment.words:
-            # Create karaoke line with word timing
-            words_with_timing = []
-            for word in segment.words:
-                duration = int((word.end - word.start) * 100)  # Convert to centiseconds
-                clean_word = word.word.strip().replace('{', '').replace('}', '')
-                words_with_timing.append(f"{{\\k{duration}}}{clean_word}")
+            all_words = segment.words
             
-            karaoke_text = "".join(words_with_timing)
-            start_time = format_ass_time(segment.start)
-            end_time = format_ass_time(segment.end)
-            
-            events.append(f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,karaoke,{karaoke_text}")
+            # Generate sliding windows with overlap
+            for i in range(0, len(all_words), window_size - 2):  # Overlap by 2 for smooth transitions
+                end_i = min(i + window_size, len(all_words))
+                window_words = all_words[i:end_i]
+                
+                if not window_words:
+                    continue
+                
+                # Window timing: from first word's start to last word's end
+                window_start = window_words[0].start
+                window_end = window_words[-1].end
+                
+                # Create karaoke text with highlighting
+                words_with_timing = []
+                for word in window_words:
+                    duration = int((word.end - word.start) * 100)  # centiseconds
+                    clean_word = word.word.strip().replace('{', '').replace('}', '').replace('\\', '\\\\').replace(':', '\\:').replace(',', '\\,')
+                    # Use \k for timing and \r to switch styles
+                    words_with_timing.append(f"{{\\k{duration}}}{{\\rHighlight}}{clean_word}{{\\rDefault}}")
+                
+                karaoke_text = " ".join(words_with_timing)
+                start_time = format_ass_time(window_start)
+                end_time = format_ass_time(window_end)
+                
+                events.append(f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,karaoke,{karaoke_text}")
     
     return ass_header + "\n".join(events)
 
