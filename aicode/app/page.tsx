@@ -14,10 +14,25 @@ import {
 } from "lucide-react";
 import CopyModal from "../app/components/modals/copy";
 
+interface WordData {
+  word: string;
+  start: number;
+  end: number;
+  probability: number;
+}
+
+interface WordSegment {
+  segment_start: number;
+  segment_end: number;
+  segment_text: string;
+  words: WordData[];
+}
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [transcript, setTranscript] = useState<string>("");
   const [segments, setSegments] = useState<any[]>([]);
+  const [wordSegments, setWordSegments] = useState<WordSegment[]>([]); // NEW
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isProcessingVideo, setIsProcessingVideo] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
@@ -26,8 +41,10 @@ export default function Home() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [srtContent, setSrtContent] = useState<string>("");
   const [currentSegment, setCurrentSegment] = useState<number>(-1);
+  const [currentWord, setCurrentWord] = useState<{ segmentIndex: number; wordIndex: number } | null>(null); // NEW
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
 
   // Create and clean up video URL
   useEffect(() => {
@@ -41,17 +58,59 @@ export default function Home() {
     }
   }, [file]);
 
-  // Video time update handler for karaoke
+  
+
+  // UPDATED: Enhanced time update handler for word-level highlighting
   const handleTimeUpdate = () => {
     if (videoRef.current && segments.length > 0) {
       const currentTime = videoRef.current.currentTime;
+      
+      // Find current segment
       const activeSegmentIndex = segments.findIndex(
         (segment) => currentTime >= segment.start && currentTime <= segment.end
       );
       setCurrentSegment(activeSegmentIndex);
+
+      // Find current word
+      if (wordSegments.length > 0) {
+        let foundWord = null;
+        
+        for (let segIndex = 0; segIndex < wordSegments.length; segIndex++) {
+          const segment = wordSegments[segIndex];
+          if (segment.words && segment.words.length > 0) {
+            for (let wordIndex = 0; wordIndex < segment.words.length; wordIndex++) {
+              const word = segment.words[wordIndex];
+              if (currentTime >= word.start && currentTime <= word.end) {
+                foundWord = { segmentIndex: segIndex, wordIndex };
+                break;
+              }
+            }
+          }
+          if (foundWord) break;
+        }
+        
+        setCurrentWord(foundWord);
+      }
     }
   };
 
+  // Click to seek function
+  const handleSegmentClick = (segmentIndex: number) => {
+    if (videoRef.current && segments[segmentIndex]) {
+      videoRef.current.currentTime = segments[segmentIndex].start;
+      setCurrentSegment(segmentIndex);
+    }
+  };
+
+  // NEW: Click word to seek
+  const handleWordClick = (segmentIndex: number, wordIndex: number) => {
+    if (videoRef.current && wordSegments[segmentIndex]?.words[wordIndex]) {
+      videoRef.current.currentTime = wordSegments[segmentIndex].words[wordIndex].start;
+      setCurrentWord({ segmentIndex, wordIndex });
+    }
+  };
+
+  // UPDATED: Use word-level transcription endpoint
   const handleUpload = async () => {
     if (!file) return;
 
@@ -59,12 +118,15 @@ export default function Home() {
     setError("");
     setTranscript("");
     setSegments([]);
+    setWordSegments([]);
+    setCurrentSegment(-1);
+    setCurrentWord(null);
 
     try {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("http://localhost:8000/transcribe", {
+      const res = await fetch("http://localhost:8000/transcribe-with-words", {
         method: "POST",
         body: formData,
       });
@@ -76,6 +138,7 @@ export default function Home() {
       const data = await res.json();
       setTranscript(data.transcript || "No transcript found");
       setSegments(data.segments || []);
+      setWordSegments(data.word_segments || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -149,7 +212,6 @@ export default function Home() {
       });
 
       if (!res.ok) {
-        // Handle error response
         const errorData = await res.json();
         if (errorData.error === "FFmpeg not available") {
           setError(`${errorData.message}\n\nInstructions:\n${errorData.instructions.join('\n')}\n\n${errorData.alternative}`);
@@ -159,10 +221,8 @@ export default function Home() {
         return;
       }
 
-      // Get the video blob
       const videoBlob = await res.blob();
       
-      // Download the file
       const url = URL.createObjectURL(videoBlob);
       const a = document.createElement('a');
       a.href = url;
@@ -179,6 +239,84 @@ export default function Home() {
     }
   };
 
+  // NEW: Word-level karaoke video download
+  const handleDownloadWordKaraokeVideo = async () => {
+    if (!file || !file.type.startsWith('video/')) return;
+
+    setIsProcessingVideo(true);
+    setError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("http://localhost:8000/create-word-level-karaoke-video", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `Server error: ${res.status}`);
+      }
+
+      const videoBlob = await res.blob();
+      
+      const url = URL.createObjectURL(videoBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `word_karaoke_${file.name}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create word-level karaoke video");
+    } finally {
+      setIsProcessingVideo(false);
+    }
+  };
+
+  // NEW: Advanced word karaoke video download
+  const handleDownloadAdvancedWordKaraoke = async () => {
+    if (!file || !file.type.startsWith('video/')) return;
+
+    setIsProcessingVideo(true);
+    setError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("http://localhost:8000/create-advanced-word-karaoke", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `Server error: ${res.status}`);
+      }
+
+      const videoBlob = await res.blob();
+      
+      const url = URL.createObjectURL(videoBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `advanced_word_karaoke_${file.name}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create advanced word karaoke video");
+    } finally {
+      setIsProcessingVideo(false);
+    }
+  };
+
   const handleFileSelect = (selectedFile: File) => {
     const validTypes = ["audio/", "video/"];
     const isValidFile = validTypes.some((type) =>
@@ -190,7 +328,10 @@ export default function Home() {
       setError("");
       setTranscript("");
       setSegments([]);
+      setWordSegments([]);
       setSrtContent("");
+      setCurrentSegment(-1);
+      setCurrentWord(null);
     } else {
       setError("Please select a valid audio or video file");
     }
@@ -232,7 +373,10 @@ export default function Home() {
     setError("");
     setTranscript("");
     setSegments([]);
+    setWordSegments([]);
     setSrtContent("");
+    setCurrentSegment(-1);
+    setCurrentWord(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -282,7 +426,7 @@ export default function Home() {
             <h1 className="text-4xl font-bold text-gray-900">AI Karaoke Transcriber</h1>
           </div>
           <p className="text-gray-600 text-lg">
-            Transform your audio and video files into subtitled videos with AI precision
+            Transform your audio and video files into subtitled videos with word-level highlighting
           </p>
         </div>
 
@@ -358,29 +502,28 @@ export default function Home() {
 
               {!isLoading && !isProcessingVideo && (
                 <div className="flex justify-center space-x-4 flex-wrap gap-2">
-  <button
-    onClick={(e) => {
-      e.stopPropagation();
-      handleUpload();
-    }}
-    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center space-x-2 shadow-md hover:shadow-lg"
-  >
-    <CheckCircle className="w-5 h-5" />
-    <span>Get Transcript</span>
-  </button>
-  
-  <button
-    onClick={(e) => {
-      e.stopPropagation();
-      removeFile();
-    }}
-    className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
-  >
-    <Trash2 className="w-4 h-4" />
-    <span>Remove</span>
-  </button>
-</div>
-
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleUpload();
+                    }}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center space-x-2 shadow-md hover:shadow-lg"
+                  >
+                    <CheckCircle className="w-5 h-5" />
+                    <span>Get Word-Level Transcript</span>
+                  </button>
+                  
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFile();
+                    }}
+                    className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Remove</span>
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -395,20 +538,19 @@ export default function Home() {
               </div>
               <div className="text-center">
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  {isLoading ? "Transcribing your file..." : "Creating Video data..."}
+                  {isLoading ? "Transcribing with word timestamps..." : "Creating Video data..."}
                 </h3>
                 <p className="text-gray-600 mb-1">
                   {isLoading 
-                    ? `AI is transcribing your ${file?.type?.includes("video") ? "video" : "audio"} content`
+                    ? `AI is processing ${file?.type?.includes("video") ? "video" : "audio"} with word-level precision`
                     : "Processing timing information for Video mode..."
                   }
                 </p>
                 <p className="text-sm text-gray-500">
-                  This may take a few moments depending on file size
+                  Word-level processing takes longer but provides precise highlighting
                 </p>
               </div>
 
-              {/* Progress indicator */}
               <div className="w-64 bg-gray-100 rounded-full h-2 overflow-hidden">
                 <div className="h-full bg-blue-600 rounded-full animate-pulse w-2/3"></div>
               </div>
@@ -433,29 +575,37 @@ export default function Home() {
         {segments.length > 0 && file && file.type.startsWith("video/") && videoUrl && (
           <div className="mt-8 bg-white rounded-2xl shadow-lg overflow-hidden">
             <div className="bg-purple-900 text-white p-6">
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold flex items-center space-x-3">
                   <Video className="w-6 h-6 text-purple-300" />
-                  <span>Video</span>
+                  <span>Video with Word-Level Captions</span>
                 </h2>
-                <div className="flex space-x-3">
-                 
+                <div className="flex flex-wrap gap-2">
                   {file?.type.startsWith('video/') && (
-                    <button
-                      onClick={handleDownloadKaraokeVideo}
-                      disabled={isProcessingVideo}
-                      className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
-                    >
-                      {isProcessingVideo ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Download className="w-4 h-4" />
-                      )}
-                      <span>{isProcessingVideo ? 'Creating...' : 'Download Video'}</span>
-                    </button>
+                    <>
+                      
+                      
+                     
+                      
+                      <button
+                        onClick={handleDownloadAdvancedWordKaraoke}
+                        disabled={isProcessingVideo}
+                        className="bg-green-600 hover:bg-green-700 disabled:opacity-50 px-3 py-2 rounded-lg transition-colors flex items-center space-x-2 text-sm"
+                      >
+                        {isProcessingVideo ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4" />
+                        )}
+                        <span>Download</span>
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
+              
+              {/* Download Options Explanation */}
+              
             </div>
             <div className="p-6">
               <div className="relative">
@@ -468,11 +618,29 @@ export default function Home() {
                   onTimeUpdate={handleTimeUpdate}
                 />
                 
-                {/* Live Caption Overlay */}
+                {/* Enhanced Live Caption Overlay with Word Highlighting */}
                 {currentSegment >= 0 && segments[currentSegment] && (
-                  <div className="absolute bottom-20 left-0 right-0 text-center">
-                    <div className="inline-block bg-black bg-opacity-80 text-white px-6 py-3 rounded-lg text-lg font-semibold max-w-4xl">
-                      {segments[currentSegment].text}
+                  <div className="absolute bottom-20 left-0 right-0 text-center px-4">
+                    <div className="inline-block bg-black bg-opacity-90 text-white px-6 py-4 rounded-lg text-lg font-semibold max-w-5xl">
+                      {currentWord && wordSegments[currentWord.segmentIndex] ? (
+                        // Render words with current word highlighted
+                        <div className="flex flex-wrap justify-center gap-1">
+                          {wordSegments[currentWord.segmentIndex].words.map((word, index) => (
+                            <span
+                              key={index}
+                              className={`transition-all duration-200 ${
+                                index === currentWord.wordIndex
+                                  ? 'bg-yellow-400 text-black px-1 rounded transform scale-110'
+                                  : 'text-white'
+                              }`}
+                            >
+                              {word.word}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        segments[currentSegment].text
+                      )}
                     </div>
                   </div>
                 )}
@@ -481,14 +649,14 @@ export default function Home() {
           </div>
         )}
 
-        {/* Transcript Result */}
+        {/* Word-Level Transcript with Highlighting */}
         {transcript && !isLoading && (
           <div className="mt-8 bg-white rounded-2xl shadow-lg overflow-hidden">
             <div className="bg-gray-900 text-white p-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold flex items-center space-x-3">
                   <CheckCircle className="w-6 h-6 text-green-400" />
-                  <span>Transcription Complete</span>
+                  <span>Word-Level Interactive Transcript</span>
                 </h2>
                 <div className="flex space-x-3">
                   <button
@@ -502,37 +670,82 @@ export default function Home() {
               </div>
             </div>
             <div className="p-6">
-
               <div className="w-full space-y-4">
-  {/* Segments with timestamps */}
-  {segments.length > 0 && (
-    <div className="bg-gray-50 rounded-xl p-4 max-h-96 overflow-y-auto">
-      <h3 className="font-semibold text-gray-800 mb-3">Timed Segments</h3>
-      <div className="space-y-2">
-        {segments.map((segment, index) => (
-          <div 
-            key={index} 
-            className={`flex items-start space-x-3 p-2 rounded transition-colors ${
-              index === currentSegment ? 'bg-purple-100 border-l-4 border-purple-500' : 'hover:bg-gray-100'
-            }`}
-          >
-            <span className="text-xs text-gray-500 font-mono bg-gray-200 px-2 py-1 rounded">
-              {formatTime(segment.start)}
-            </span>
-            <span className={`flex-1 ${
-              index === currentSegment ? 'text-purple-800 font-semibold' : 'text-gray-800'
-            }`}>
-              {segment.text.trim()}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )}
-  
- 
-</div>
-
+                {/* Word-Level Interactive Transcript */}
+                {wordSegments.length > 0 && (
+                  <div className="bg-gray-50 rounded-xl p-4 max-h-96 overflow-y-auto" ref={transcriptRef}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-gray-800">Word-by-Word Transcript</h3>
+                      <p className="text-sm text-gray-500">Click any word to jump to that moment</p>
+                    </div>
+                    <div className="space-y-4">
+                      {wordSegments.map((segment, segmentIndex) => (
+                        <div 
+                          key={segmentIndex} 
+                          data-segment-index={segmentIndex}
+                          className={`
+                            p-4 rounded-lg border transition-all duration-300
+                            ${segmentIndex === currentSegment 
+                              ? 'bg-purple-50 border-purple-200 shadow-md' 
+                              : 'bg-white border-gray-200 hover:bg-gray-50'
+                            }
+                          `}
+                        >
+                          <div className="flex items-center mb-2">
+                            <span className="text-xs text-gray-500 font-mono bg-gray-200 px-2 py-1 rounded">
+                              {formatTime(segment.segment_start)}
+                            </span>
+                          </div>
+                          
+                          {/* Word-by-word rendering */}
+                          <div className="flex flex-wrap gap-1 leading-relaxed">
+                            {segment.words && segment.words.length > 0 ? (
+                              segment.words.map((word, wordIndex) => {
+                                const isCurrentWord = currentWord?.segmentIndex === segmentIndex && currentWord?.wordIndex === wordIndex;
+                                const isInCurrentSegment = segmentIndex === currentSegment;
+                                
+                                return (
+                                  <span
+                                    key={wordIndex}
+                                    className={`
+                                      cursor-pointer transition-all duration-200 px-1 py-0.5 rounded text-base
+                                      ${isCurrentWord 
+                                        ? 'bg-yellow-300 text-black font-bold shadow-sm transform scale-105' 
+                                        : isInCurrentSegment
+                                        ? 'bg-purple-100 text-purple-900 hover:bg-purple-200'
+                                        : 'text-gray-800 hover:bg-blue-100 hover:text-blue-900'
+                                      }
+                                    `}
+                                    onClick={() => handleWordClick(segmentIndex, wordIndex)}
+                                    title={`${word.start.toFixed(1)}s - ${word.end.toFixed(1)}s`}
+                                  >
+                                    {word.word}
+                                  </span>
+                                );
+                              })
+                            ) : (
+                              // Fallback for segments without word data
+                              <span className="text-gray-800">{segment.segment_text}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Current word indicator */}
+                    {currentWord && (
+                      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-3 h-3 bg-yellow-400 rounded-full animate-pulse"></div>
+                          <span className="text-sm text-yellow-800">
+                            Currently speaking: <strong>{wordSegments[currentWord.segmentIndex]?.words[currentWord.wordIndex]?.word}</strong>
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -545,7 +758,7 @@ export default function Home() {
 
         {/* Footer */}
         <div className="text-center mt-12 text-gray-500">
-          <p>Powered by Kurt Pogi • Secure & Private • Lightning Fast</p>
+          <p>Powered by Kurt Pogi • Secure & Private • Word-Level Precision</p>
         </div>
       </div>
     </div>

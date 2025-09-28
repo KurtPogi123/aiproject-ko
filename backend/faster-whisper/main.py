@@ -51,8 +51,8 @@ async def transcribe(file: UploadFile = File(...)):
         if os.path.exists(input_path):
             os.unlink(input_path)
 
-@app.post("/create-srt")
-async def create_srt(file: UploadFile = File(...)):
+
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
         tmp.write(await file.read())
         input_path = tmp.name
@@ -74,62 +74,8 @@ async def create_srt(file: UploadFile = File(...)):
         if os.path.exists(input_path):
             os.unlink(input_path)
 
-@app.post("/test-basic-conversion")
-async def test_basic_conversion(file: UploadFile = File(...)):
-    """Test basic video conversion without subtitles"""
-    input_path = None
-    output_path = None
-    
-    try:
-        input_path = f"test_input_{os.getpid()}.mp4"
-        output_path = f"test_output_{os.getpid()}.mp4"
-        
-        with open(input_path, 'wb') as f:
-            content = await file.read()
-            f.write(content)
-        
-        ffmpeg_path = "C:/ffmpeg/ffmpeg.exe"
-        
-        command = [
-            ffmpeg_path,
-            "-i", input_path,
-            "-t", "5",  # Only 5 seconds for testing
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-crf", "28",
-            "-c:a", "aac",
-            "-y",
-            output_path
-        ]
-        
-        result = subprocess.run(command, capture_output=True, text=True, timeout=60)
-        
-        if result.returncode == 0 and os.path.exists(output_path):
-            size = os.path.getsize(output_path)
-            return {
-                "success": True, 
-                "message": "Basic conversion works",
-                "output_size": size
-            }
-        else:
-            return {
-                "success": False,
-                "error": "Basic conversion failed",
-                "stderr": result.stderr
-            }
-            
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-    finally:
-        for temp_file in [input_path, output_path]:
-            if temp_file and os.path.exists(temp_file):
-                try:
-                    os.unlink(temp_file)
-                except:
-                    pass
 
-@app.post("/create-karaoke-video")
-async def create_karaoke_video(file: UploadFile = File(...)):
+
     """
     Create a video with burned-in subtitles
     """
@@ -269,19 +215,82 @@ async def create_karaoke_video(file: UploadFile = File(...)):
                     print(f"Cleaned up: {temp_file}")
                 except:
                     pass
+# Add this new endpoint to your existing FastAPI code
 
-@app.post("/create-karaoke-video-overlay")
-async def create_karaoke_video_overlay(file: UploadFile = File(...)):
+@app.post("/transcribe-with-words")
+async def transcribe_with_words(file: UploadFile = File(...)):
+    """Get transcription with word-level timestamps"""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+        tmp.write(await file.read())
+        input_path = tmp.name
+
+    try:
+        # Enable word timestamps
+        segments, info = model.transcribe(input_path, word_timestamps=True)
+        segments_list = list(segments)
+        
+        # Extract word-level data
+        word_segments = []
+        full_transcript = ""
+        
+        for segment in segments_list:
+            if hasattr(segment, 'words') and segment.words:
+                segment_words = []
+                for word in segment.words:
+                    word_data = {
+                        "word": word.word,
+                        "start": word.start,
+                        "end": word.end,
+                        "probability": word.probability
+                    }
+                    segment_words.append(word_data)
+                    full_transcript += word.word + " "
+                
+                word_segments.append({
+                    "segment_start": segment.start,
+                    "segment_end": segment.end,
+                    "segment_text": segment.text.strip(),
+                    "words": segment_words
+                })
+            else:
+                # Fallback for segments without word timestamps
+                word_segments.append({
+                    "segment_start": segment.start,
+                    "segment_end": segment.end,
+                    "segment_text": segment.text.strip(),
+                    "words": []
+                })
+
+        return {
+            "language": info.language,
+            "transcript": full_transcript.strip(),
+            "segments": [
+                {"start": seg.start, "end": seg.end, "text": seg.text.strip()}
+                for seg in segments_list
+            ],
+            "word_segments": word_segments
+        }
+    finally:
+        if os.path.exists(input_path):
+            os.unlink(input_path)
+
+    
+
+
+# Add these new endpoints to your existing FastAPI backend
+
+@app.post("/create-word-level-karaoke-video")
+async def create_word_level_karaoke_video(file: UploadFile = File(...)):
     """
-    Create karaoke video using text overlay instead of subtitle files
+    Create karaoke video with word-by-word highlighting
     """
     input_path = None
     output_path = None
     
     try:
-        print(f"Processing file: {file.filename}")
+        print(f"Processing file for word-level karaoke: {file.filename}")
         
-        # Save input file
+        # Save uploaded video
         input_path = f"input_{os.getpid()}.mp4"
         with open(input_path, 'wb') as f:
             content = await file.read()
@@ -289,11 +298,29 @@ async def create_karaoke_video_overlay(file: UploadFile = File(...)):
         
         print(f"Input saved: {os.path.getsize(input_path)} bytes")
 
-        # Get transcription
-        segments, info = model.transcribe(input_path)
+        # Get word-level transcription
+        segments, info = model.transcribe(input_path, word_timestamps=True)
         segments_list = list(segments)
         if not segments_list:
             return {"error": "No speech detected"}
+
+        print(f"Transcribed {len(segments_list)} segments with word timestamps")
+
+        # Extract all words with timestamps
+        all_words = []
+        for segment in segments_list:
+            if hasattr(segment, 'words') and segment.words:
+                for word in segment.words:
+                    all_words.append({
+                        'text': word.word.strip(),
+                        'start': word.start,
+                        'end': word.end
+                    })
+
+        if not all_words:
+            return {"error": "No word-level timestamps available"}
+
+        print(f"Extracted {len(all_words)} words with timestamps")
 
         # Create output path
         output_path = f"output_{os.getpid()}.mp4"
@@ -302,53 +329,69 @@ async def create_karaoke_video_overlay(file: UploadFile = File(...)):
         if not os.path.exists(ffmpeg_path):
             return {"error": "FFmpeg not found"}
 
-        # Build text overlay filters
+        # Build word-by-word highlight filters
         text_filters = []
-        for i, seg in enumerate(segments_list):
-            # Clean and escape text for FFmpeg
-            text = seg.text.strip()
-            text = text.replace("'", "\\'").replace(":", "\\:")
-            text = text.replace("(", "\\(").replace(")", "\\)")
-            
-            # Create text overlay filter
-            start_time = seg.start
-            end_time = seg.end
-            
-            text_filter = f"drawtext=text='{text}':fontcolor=white:fontsize=24:box=1:boxcolor=black@0.8:boxborderw=5:x=(w-text_w)/2:y=h-th-20:enable='between(t,{start_time},{end_time})'"
-            text_filters.append(text_filter)
         
-        # Combine all text filters
+        # Create base subtitle track (all words in white)
+        base_words = []
+        for word in all_words:
+            clean_text = word['text'].replace("'", "\\'").replace(":", "\\:")
+            clean_text = clean_text.replace("(", "\\(").replace(")", "\\)")
+            base_words.append(clean_text)
+        
+        full_text = " ".join(base_words)
+        base_filter = f"drawtext=text='{full_text}':fontcolor=white:fontsize=20:box=1:boxcolor=black@0.8:boxborderw=3:x=(w-text_w)/2:y=h-th-30"
+        text_filters.append(base_filter)
+        
+        # Create highlight filters for each word
+        current_pos = 0
+        for i, word in enumerate(all_words):
+            word_text = word['text'].strip()
+            if not word_text:
+                continue
+                
+            # Calculate word position in the full text
+            words_before = " ".join([w['text'].strip() for w in all_words[:i]])
+            word_start_pos = len(words_before) + (1 if words_before else 0)  # +1 for space
+            
+            # Create highlight filter for this specific word
+            clean_word = word_text.replace("'", "\\'").replace(":", "\\:")
+            clean_word = clean_word.replace("(", "\\(").replace(")", "\\)")
+            
+            # Highlight this word in yellow during its timespan
+            highlight_filter = f"drawtext=text='{clean_word}':fontcolor=yellow:fontsize=22:box=1:boxcolor=red@0.6:boxborderw=2:x=(w-text_w)/2+{word_start_pos*12}:y=h-th-30:enable='between(t,{word['start']},{word['end']})'"
+            text_filters.append(highlight_filter)
+
+        # Combine all filters
         if text_filters:
             video_filter = ",".join(text_filters)
         else:
-            return {"error": "No text to overlay"}
+            return {"error": "No text filters created"}
 
-        # FFmpeg command with text overlay
+        print("Creating word-level karaoke video with FFmpeg...")
+        
+        # FFmpeg command with word-level highlighting
         command = [
             ffmpeg_path,
             "-i", input_path,
             "-vf", video_filter,
             "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "23",
+            "-preset", "medium",  # Better quality for final output
+            "-crf", "20",         # Higher quality
             "-c:a", "copy",
             "-y",
             output_path
         ]
 
-        print("Running FFmpeg with text overlay...")
-        print(f"Command: {' '.join(command[:5])} ... [text filters] ... {command[-3:]}")
-        
-        result = subprocess.run(command, capture_output=True, text=True, timeout=600)
+        print("Running FFmpeg with word-level highlighting...")
+        result = subprocess.run(command, capture_output=True, text=True, timeout=900)  # 15 min timeout
         
         print(f"FFmpeg exit code: {result.returncode}")
         
         if result.returncode != 0:
-            print(f"FFmpeg error: {result.stderr[-500:]}")
-            return {
-                "error": "Text overlay failed", 
-                "details": result.stderr[-500:]
-            }
+            print(f"FFmpeg error: {result.stderr[-1000:]}")
+            # Try simpler approach if complex filtering fails
+            return await create_simple_word_karaoke_video(input_path, all_words, output_path)
 
         if not os.path.exists(output_path):
             return {"error": "Output file not created"}
@@ -362,8 +405,8 @@ async def create_karaoke_video_overlay(file: UploadFile = File(...)):
         return FileResponse(
             output_path,
             media_type="video/mp4", 
-            filename=f"karaoke_overlay_{file.filename}",
-            headers={"Content-Disposition": f"attachment; filename=karaoke_overlay_{file.filename}"}
+            filename=f"word_karaoke_{file.filename}",
+            headers={"Content-Disposition": f"attachment; filename=word_karaoke_{file.filename}"}
         )
 
     except Exception as e:
@@ -376,6 +419,201 @@ async def create_karaoke_video_overlay(file: UploadFile = File(...)):
                 os.unlink(input_path)
             except:
                 pass
+
+async def create_simple_word_karaoke_video(input_path: str, all_words: list, output_path: str):
+    """
+    Fallback: Create video with segment-by-segment highlighting
+    """
+    try:
+        ffmpeg_path = "C:/ffmpeg/ffmpeg.exe"
+        
+        # Group words into segments for simpler processing
+        segments = []
+        current_segment = []
+        segment_start = None
+        
+        for word in all_words:
+            if not current_segment:
+                segment_start = word['start']
+            
+            current_segment.append(word['text'])
+            
+            # Create segments of ~5 words or when there's a pause
+            if len(current_segment) >= 5 or (len(current_segment) > 0 and word == all_words[-1]):
+                segments.append({
+                    'text': ' '.join(current_segment),
+                    'start': segment_start,
+                    'end': word['end']
+                })
+                current_segment = []
+                segment_start = None
+
+        # Create text overlay filters for segments
+        text_filters = []
+        for segment in segments:
+            clean_text = segment['text'].replace("'", "\\'").replace(":", "\\:")
+            clean_text = clean_text.replace("(", "\\(").replace(")", "\\)")
+            
+            text_filter = f"drawtext=text='{clean_text}':fontcolor=yellow:fontsize=24:box=1:boxcolor=black@0.8:boxborderw=5:x=(w-text_w)/2:y=h-th-20:enable='between(t,{segment['start']},{segment['end']})'"
+            text_filters.append(text_filter)
+
+        if text_filters:
+            video_filter = ",".join(text_filters)
+        else:
+            return {"error": "No fallback text filters created"}
+
+        # Simple FFmpeg command
+        command = [
+            ffmpeg_path,
+            "-i", input_path,
+            "-vf", video_filter,
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "23",
+            "-c:a", "copy",
+            "-y",
+            output_path
+        ]
+
+        print("Running fallback FFmpeg command...")
+        result = subprocess.run(command, capture_output=True, text=True, timeout=600)
+        
+        if result.returncode != 0:
+            return {
+                "error": "Both word-level and fallback processing failed",
+                "details": result.stderr[-500:]
+            }
+
+        return FileResponse(
+            output_path,
+            media_type="video/mp4",
+            filename=f"simple_karaoke_{os.path.basename(input_path)}",
+            headers={"Content-Disposition": f"attachment; filename=simple_karaoke_{os.path.basename(input_path)}"}
+        )
+        
+    except Exception as e:
+        return {"error": f"Fallback processing failed: {str(e)}"}
+
+@app.post("/create-advanced-word-karaoke")
+async def create_advanced_word_karaoke(file: UploadFile = File(...)):
+    """
+    Advanced word-level karaoke with better positioning and animations
+    """
+    input_path = None
+    subtitle_file = None
+    output_path = None
+    
+    try:
+        print(f"Creating advanced word karaoke for: {file.filename}")
+        
+        # Save input
+        input_path = f"advanced_input_{os.getpid()}.mp4"
+        with open(input_path, 'wb') as f:
+            content = await file.read()
+            f.write(content)
+
+        # Get word-level transcription
+        segments, info = model.transcribe(input_path, word_timestamps=True)
+        segments_list = list(segments)
+        
+        if not segments_list:
+            return {"error": "No speech detected"}
+
+        # Create ASS subtitle file for better control
+        subtitle_file = f"advanced_subs_{os.getpid()}.ass"
+        ass_content = create_word_level_ass_subtitle(segments_list)
+        
+        with open(subtitle_file, 'w', encoding='utf-8') as f:
+            f.write(ass_content)
+
+        output_path = f"advanced_output_{os.getpid()}.mp4"
+        ffmpeg_path = "C:/ffmpeg/ffmpeg.exe"
+
+        # Use ASS subtitles for better word-level control
+        command = [
+            ffmpeg_path,
+            "-i", input_path,
+            "-vf", f"ass='{subtitle_file}'",
+            "-c:v", "libx264",
+            "-preset", "medium",
+            "-crf", "20",
+            "-c:a", "copy",
+            "-y",
+            output_path
+        ]
+
+        print("Creating advanced word-level karaoke...")
+        result = subprocess.run(command, capture_output=True, text=True, timeout=900)
+
+        if result.returncode != 0:
+            print(f"Advanced processing failed: {result.stderr}")
+            # Fallback to simple method
+            return await create_word_level_karaoke_video(file)
+
+        if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
+            return {"error": "Advanced processing failed"}
+
+        return FileResponse(
+            output_path,
+            media_type="video/mp4",
+            filename=f"advanced_word_karaoke_{file.filename}",
+            headers={"Content-Disposition": f"attachment; filename=advanced_word_karaoke_{file.filename}"}
+        )
+
+    except Exception as e:
+        return {"error": f"Advanced processing failed: {str(e)}"}
+    
+    finally:
+        for temp_file in [input_path, subtitle_file]:
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.unlink(temp_file)
+                except:
+                    pass
+
+def create_word_level_ass_subtitle(segments_list):
+    """
+    Create ASS subtitle format for word-level karaoke effects
+    """
+    ass_header = """[Script Info]
+Title: Word-Level Karaoke
+ScriptType: v4.00+
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,28,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,2,10,10,30,1
+Style: Highlight,Arial,30,&H0000FFFF,&H000000FF,&H00FF0000,&H00000000,1,0,0,0,100,100,0,0,1,3,0,2,10,10,30,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    
+    events = []
+    
+    for segment in segments_list:
+        if hasattr(segment, 'words') and segment.words:
+            # Create karaoke line with word timing
+            words_with_timing = []
+            for word in segment.words:
+                duration = int((word.end - word.start) * 100)  # Convert to centiseconds
+                clean_word = word.word.strip().replace('{', '').replace('}', '')
+                words_with_timing.append(f"{{\\k{duration}}}{clean_word}")
+            
+            karaoke_text = "".join(words_with_timing)
+            start_time = format_ass_time(segment.start)
+            end_time = format_ass_time(segment.end)
+            
+            events.append(f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,karaoke,{karaoke_text}")
+    
+    return ass_header + "\n".join(events)
+
+def format_ass_time(seconds):
+    """Convert seconds to ASS time format (H:MM:SS.CC)"""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    centisecs = int((seconds % 1) * 100)
+    return f"{hours}:{minutes:02d}:{secs:02d}.{centisecs:02d}"
 
 @app.get("/health")
 async def health_check():
