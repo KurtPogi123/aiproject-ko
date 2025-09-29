@@ -154,8 +154,7 @@ async def create_advanced_word_karaoke(
         output_path = f"advanced_output_{os.getpid()}.mp4"
         ffmpeg_path = "ffmpeg" 
 
-        if not os.path.exists(ffmpeg_path):
-            return {"error": "FFmpeg not found"}
+        
 
         # Use ASS subtitles with libass for rendering
         command = [
@@ -370,8 +369,7 @@ async def create_word_level_karaoke_video(
         output_path = f"output_{os.getpid()}.mp4"
         ffmpeg_path = "ffmpeg" 
         
-        if not os.path.exists(ffmpeg_path):
-            return {"error": "FFmpeg not found"}
+    
 
         # Get font settings
         font_size = int(fontSize)
