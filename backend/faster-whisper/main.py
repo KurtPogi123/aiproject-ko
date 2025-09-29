@@ -152,7 +152,7 @@ async def create_advanced_word_karaoke(
             f.write(ass_content)
 
         output_path = f"advanced_output_{os.getpid()}.mp4"
-        ffmpeg_path = "C:/ffmpeg/ffmpeg.exe"
+        ffmpeg_path = "ffmpeg" 
 
         if not os.path.exists(ffmpeg_path):
             return {"error": "FFmpeg not found"}
@@ -368,7 +368,7 @@ async def create_word_level_karaoke_video(
 
         # Create output path
         output_path = f"output_{os.getpid()}.mp4"
-        ffmpeg_path = "C:/ffmpeg/ffmpeg.exe"
+        ffmpeg_path = "ffmpeg" 
         
         if not os.path.exists(ffmpeg_path):
             return {"error": "FFmpeg not found"}
@@ -458,7 +458,7 @@ async def create_simple_word_karaoke_video(input_path: str, all_words: list, out
     Fallback: Create video with segment-by-segment highlighting and custom fonts (single layer)
     """
     try:
-        ffmpeg_path = "C:/ffmpeg/ffmpeg.exe"
+        ffmpeg_path = "ffmpeg" 
         size = int(font_size)
         
         # Group words into segments for simpler processing
