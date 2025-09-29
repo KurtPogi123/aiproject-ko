@@ -4,15 +4,7 @@ services:
     env: python
     plan: free
     buildCommand: |
-      apt-get update && apt-get install -y \
-        ffmpeg \
-        libavformat-dev \
-        libavcodec-dev \
-        libavdevice-dev \
-        libavutil-dev \
-        libavfilter-dev \
-        libswscale-dev \
-        libswresample-dev \
-        pkg-config \
-        && pip install -r backend/faster-whisper/requirements.txt
+      apt-get update && apt-get install -y ffmpeg
+      pip install --upgrade pip wheel setuptools
+      pip install -r backend/faster-whisper/requirements.txt
     startCommand: uvicorn backend.faster-whisper.main:app --host 0.0.0.0 --port $PORT
