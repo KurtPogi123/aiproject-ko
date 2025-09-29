@@ -183,7 +183,7 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("https://aiproject-ko-iaa0.onrender.com/transcribe-with-words", {
+      const res = await fetch("http://localhost:8000/transcribe-with-words", {
         method: "POST",
         body: formData,
       });
@@ -216,7 +216,7 @@ export default function Home() {
       formData.append("fontFamily", fontSettings.fontFamily);
       formData.append("fontSize", fontSettings.fontSize.toString());
 
-      const res = await fetch("https://aiproject-ko-iaa0.onrender.com/create-advanced-word-karaoke", {
+      const res = await fetch("http://localhost:8000/create-advanced-word-karaoke", {
         method: "POST",
         body: formData,
       });
@@ -254,7 +254,7 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("https://aiproject-ko-iaa0.onrender.com/transcribe-with-video", {
+      const res = await fetch("http://localhost:8000/transcribe-with-video", {
         method: "POST",
         body: formData,
       });
