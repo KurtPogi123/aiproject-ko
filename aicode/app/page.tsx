@@ -11,6 +11,8 @@ import {
   Trash2,
   AlertCircle,
   Download,
+  Type,
+  Palette,
 } from "lucide-react";
 import CopyModal from "../app/components/modals/copy";
 
@@ -28,11 +30,16 @@ interface WordSegment {
   words: WordData[];
 }
 
+interface FontSettings {
+  fontFamily: string;
+  fontSize: number;
+}
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [transcript, setTranscript] = useState<string>("");
   const [segments, setSegments] = useState<any[]>([]);
-  const [wordSegments, setWordSegments] = useState<WordSegment[]>([]); // NEW
+  const [wordSegments, setWordSegments] = useState<WordSegment[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isProcessingVideo, setIsProcessingVideo] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
@@ -41,10 +48,25 @@ export default function Home() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [srtContent, setSrtContent] = useState<string>("");
   const [currentSegment, setCurrentSegment] = useState<number>(-1);
-  const [currentWord, setCurrentWord] = useState<{ segmentIndex: number; wordIndex: number } | null>(null); // NEW
+  const [currentWord, setCurrentWord] = useState<{ segmentIndex: number; wordIndex: number } | null>(null);
+  const [currentWordWindow, setCurrentWordWindow] = useState<WordData[]>([]);
+  
+  // NEW: Font settings state
+  const [fontSettings, setFontSettings] = useState<FontSettings>({
+    fontFamily: 'Roboto',
+    fontSize: 20
+  });
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
+
+  // Available fonts
+  const availableFonts = [
+    { name: 'Roboto', value: 'Roboto, sans-serif' },
+    { name: 'Poppins', value: 'Poppins, sans-serif' },
+    { name: 'Aptos Black', value: 'Aptos, -apple-system, BlinkMacSystemFont, sans-serif' }
+  ];
 
   // Create and clean up video URL
   useEffect(() => {
@@ -57,8 +79,6 @@ export default function Home() {
       };
     }
   }, [file]);
-
-  const [currentWordWindow, setCurrentWordWindow] = useState<WordData[]>([]);
 
   // UPDATED: Enhanced time update handler for word-level highlighting
   const handleTimeUpdate = () => {
@@ -130,12 +150,21 @@ export default function Home() {
     }
   };
 
-  // NEW: Click word to seek
+  // Click word to seek
   const handleWordClick = (segmentIndex: number, wordIndex: number) => {
     if (videoRef.current && wordSegments[segmentIndex]?.words[wordIndex]) {
       videoRef.current.currentTime = wordSegments[segmentIndex].words[wordIndex].start;
       setCurrentWord({ segmentIndex, wordIndex });
     }
+  };
+
+  // Font setting handlers
+  const handleFontChange = (fontFamily: string) => {
+    setFontSettings(prev => ({ ...prev, fontFamily }));
+  };
+
+  const handleFontSizeChange = (fontSize: number) => {
+    setFontSettings(prev => ({ ...prev, fontSize }));
   };
 
   // UPDATED: Use word-level transcription endpoint
@@ -171,6 +200,47 @@ export default function Home() {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // UPDATED: Advanced word karaoke video download with font settings
+  const handleDownloadAdvancedWordKaraoke = async () => {
+    if (!file || !file.type.startsWith('video/')) return;
+
+    setIsProcessingVideo(true);
+    setError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fontFamily", fontSettings.fontFamily);
+      formData.append("fontSize", fontSettings.fontSize.toString());
+
+      const res = await fetch("http://localhost:8000/create-advanced-word-karaoke", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `Server error: ${res.status}`);
+      }
+
+      const videoBlob = await res.blob();
+      
+      const url = URL.createObjectURL(videoBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `advanced_word_karaoke_${file.name}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create advanced word karaoke video");
+    } finally {
+      setIsProcessingVideo(false);
     }
   };
 
@@ -222,127 +292,6 @@ export default function Home() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  };
-
-  const handleDownloadKaraokeVideo = async () => {
-    if (!file || !file.type.startsWith('video/')) return;
-
-    setIsProcessingVideo(true);
-    setError("");
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await fetch("http://localhost:8000/create-karaoke-video", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        if (errorData.error === "FFmpeg not available") {
-          setError(`${errorData.message}\n\nInstructions:\n${errorData.instructions.join('\n')}\n\n${errorData.alternative}`);
-        } else {
-          throw new Error(errorData.error || `Server error: ${res.status}`);
-        }
-        return;
-      }
-
-      const videoBlob = await res.blob();
-      
-      const url = URL.createObjectURL(videoBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `karaoke_${file.name}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create karaoke video");
-    } finally {
-      setIsProcessingVideo(false);
-    }
-  };
-
-  // NEW: Word-level karaoke video download
-  const handleDownloadWordKaraokeVideo = async () => {
-    if (!file || !file.type.startsWith('video/')) return;
-
-    setIsProcessingVideo(true);
-    setError("");
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await fetch("http://localhost:8000/create-word-level-karaoke-video", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || `Server error: ${res.status}`);
-      }
-
-      const videoBlob = await res.blob();
-      
-      const url = URL.createObjectURL(videoBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `word_karaoke_${file.name}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create word-level karaoke video");
-    } finally {
-      setIsProcessingVideo(false);
-    }
-  };
-
-  // NEW: Advanced word karaoke video download
-  const handleDownloadAdvancedWordKaraoke = async () => {
-    if (!file || !file.type.startsWith('video/')) return;
-
-    setIsProcessingVideo(true);
-    setError("");
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await fetch("http://localhost:8000/create-advanced-word-karaoke", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || `Server error: ${res.status}`);
-      }
-
-      const videoBlob = await res.blob();
-      
-      const url = URL.createObjectURL(videoBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `advanced_word_karaoke_${file.name}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create advanced word karaoke video");
-    } finally {
-      setIsProcessingVideo(false);
-    }
   };
 
   const handleFileSelect = (selectedFile: File) => {
@@ -601,74 +550,79 @@ export default function Home() {
 
         {/* Karaoke Video with Live Captions */}
         {segments.length > 0 && file && file.type.startsWith("video/") && videoUrl && (
-      <div className="mt-8 bg-white rounded-2xl shadow-lg overflow-hidden">
-        <div className="bg-purple-900 text-white p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold flex items-center space-x-3">
-              <Video className="w-6 h-6 text-purple-300" />
-              <span>Video with Word-Level Captions</span>
-            </h2>
-            <div className="flex flex-wrap gap-2">
-              {file?.type.startsWith('video/') && (
-                <>
-                  <button
-                    onClick={handleDownloadAdvancedWordKaraoke}
-                    disabled={isProcessingVideo}
-                    className="bg-green-600 hover:bg-green-700 disabled:opacity-50 px-3 py-2 rounded-lg transition-colors flex items-center space-x-2 text-sm"
-                  >
-                    {isProcessingVideo ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Download className="w-4 h-4" />
-                    )}
-                    <span>Download</span>
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="p-6">
-          <div className="relative">
-            <video
-              ref={videoRef}
-              src={videoUrl}
-              controls
-              className="w-full rounded-xl shadow-md"
-              style={{ maxHeight: "500px" }}
-              onTimeUpdate={handleTimeUpdate}
-            />
-            
-            {/* UPDATED: Live Caption Overlay with Word Window */}
-            {currentSegment >= 0 && segments[currentSegment] && currentWordWindow.length > 0 && (
-              <div className="absolute bottom-20 left-0 right-0 text-center px-4">
-                <div className="inline-block bg-black bg-opacity-90 text-white px-6 py-4 rounded-lg text-lg font-semibold max-w-5xl">
-                  <div className="flex flex-wrap justify-center gap-1">
-                    {currentWordWindow.map((word, index) => {
-                      const isCurrentWord = currentWord && wordSegments[currentWord.segmentIndex]?.words[currentWord.wordIndex]?.word === word.word;
-                      return (
-                        <span
-                          key={index}
-                          className={`transition-all duration-200 ${
-                            isCurrentWord
-                              ? 'bg-yellow-400 text-black px-1 rounded transform scale-110'
-                              : 'text-white'
-                          }`}
-                        >
-                          {word.word}
-                        </span>
-                      );
-                    })}
-                  </div>
+          <div className="mt-8 bg-white rounded-2xl shadow-lg overflow-hidden">
+            <div className="bg-purple-900 text-white p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold flex items-center space-x-3">
+                  <Video className="w-6 h-6 text-purple-300" />
+                  <span>Video with Word-Level Captions</span>
+                </h2>
+                <div className="flex flex-wrap gap-2">
+                  {file?.type.startsWith('video/') && (
+                    <>
+                      <button
+                        onClick={handleDownloadAdvancedWordKaraoke}
+                        disabled={isProcessingVideo}
+                        className="bg-green-600 hover:bg-green-700 disabled:opacity-50 px-3 py-2 rounded-lg transition-colors flex items-center space-x-2 text-sm"
+                      >
+                        {isProcessingVideo ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Download className="w-4 h-4" />
+                        )}
+                        <span>Download</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
+            <div className="p-6">
+              <div className="relative">
+                <video
+                  ref={videoRef}
+                  src={videoUrl}
+                  controls
+                  className="w-full rounded-xl shadow-md"
+                  style={{ maxHeight: "500px" }}
+                  onTimeUpdate={handleTimeUpdate}
+                />
+                
+                {/* Live Caption Overlay with Dynamic Font Settings */}
+                {currentSegment >= 0 && segments[currentSegment] && currentWordWindow.length > 0 && (
+                  <div className="absolute bottom-20 left-0 right-0 text-center px-4">
+                    <div className="inline-block bg-black bg-opacity-90 text-white px-6 py-4 rounded-lg max-w-5xl"
+                         style={{ 
+                           fontFamily: availableFonts.find(f => f.name === fontSettings.fontFamily)?.value || 'sans-serif',
+                           fontSize: `${fontSettings.fontSize}px`,
+                           fontWeight: fontSettings.fontFamily === 'Aptos Black' ? 'bold' : 'normal'
+                         }}>
+                      <div className="flex flex-wrap justify-center gap-1">
+                        {currentWordWindow.map((word, index) => {
+                          const isCurrentWord = currentWord && wordSegments[currentWord.segmentIndex]?.words[currentWord.wordIndex]?.word === word.word;
+                          return (
+                            <span
+                              key={index}
+                              className={`transition-all duration-200 ${
+                                isCurrentWord
+                                  ? 'bg-yellow-400 text-black px-1 rounded transform scale-110'
+                                  : 'text-white'
+                              }`}
+                            >
+                              {word.word}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-    )}
+        )}
 
-        {/* Word-Level Transcript with Highlighting */}
+        {/* Word-Level Transcript with Font Controls */}
         {transcript && !isLoading && (
           <div className="mt-8 bg-white rounded-2xl shadow-lg overflow-hidden">
             <div className="bg-gray-900 text-white p-6">
@@ -688,9 +642,97 @@ export default function Home() {
                 </div>
               </div>
             </div>
+
+            {/* NEW: Font Customization Panel */}
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-b p-6">
+              <div className="flex items-center space-x-4 mb-4">
+                <Type className="w-5 h-5 text-blue-600" />
+                <h3 className="text-lg font-semibold text-gray-800">Font Settings</h3>
+                <Palette className="w-4 h-4 text-purple-600" />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Font Family Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Font Family
+                  </label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {availableFonts.map((font) => (
+                      <button
+                        key={font.name}
+                        onClick={() => handleFontChange(font.name)}
+                        className={`
+                          p-3 rounded-lg border-2 transition-all duration-200 text-left
+                          ${fontSettings.fontFamily === font.name 
+                            ? 'border-blue-500 bg-blue-50 text-blue-900' 
+                            : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50'
+                          }
+                        `}
+                        style={{ 
+                          fontFamily: font.value,
+                          fontWeight: font.name === 'Aptos Black' ? 'bold' : 'normal'
+                        }}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium">{font.name}</span>
+                          <span className="text-sm text-gray-500" style={{ fontFamily: font.value }}>
+                            Sample Text
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Font Size Slider */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Font Size: <span className="text-blue-600 font-bold">{fontSettings.fontSize}px</span>
+                  </label>
+                  <div className="space-y-4">
+                    {/* Preview */}
+                    <div className="bg-white p-4 rounded-lg border border-gray-200">
+                      <div 
+                        className="text-gray-800"
+                        style={{ 
+                          fontFamily: availableFonts.find(f => f.name === fontSettings.fontFamily)?.value || 'sans-serif',
+                          fontSize: `${fontSettings.fontSize}px`,
+                          fontWeight: fontSettings.fontFamily === 'Aptos Black' ? 'bold' : 'normal'
+                        }}
+                      >
+                        Preview: This is how your captions will look
+                      </div>
+                    </div>
+                    
+                    {/* Slider */}
+                    <div className="relative">
+                      <input
+                        type="range"
+                        min="12"
+                        max="36"
+                        step="1"
+                        value={fontSettings.fontSize}
+                        onChange={(e) => handleFontSizeChange(parseInt(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                        style={{
+                          background: `linear-gradient(to right, #3B82F6 0%, #3B82F6 ${((fontSettings.fontSize - 12) / (36 - 12)) * 100}%, #E5E7EB ${((fontSettings.fontSize - 12) / (36 - 12)) * 100}%, #E5E7EB 100%)`
+                        }}
+                      />
+                      <div className="flex justify-between text-xs text-gray-500 mt-2">
+                        <span>Small (12px)</span>
+                        <span>Medium (24px)</span>
+                        <span>Large (36px)</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="p-6">
               <div className="w-full space-y-4">
-                {/* Word-Level Interactive Transcript */}
+                {/* Word-Level Interactive Transcript with Dynamic Fonts */}
                 {wordSegments.length > 0 && (
                   <div className="bg-gray-50 rounded-xl p-4 max-h-96 overflow-y-auto" ref={transcriptRef}>
                     <div className="flex items-center justify-between mb-3">
@@ -716,8 +758,13 @@ export default function Home() {
                             </span>
                           </div>
                           
-                          {/* Word-by-word rendering */}
-                          <div className="flex flex-wrap gap-1 leading-relaxed">
+                          {/* Word-by-word rendering with dynamic font settings */}
+                          <div className="flex flex-wrap gap-1 leading-relaxed"
+                               style={{ 
+                                 fontFamily: availableFonts.find(f => f.name === fontSettings.fontFamily)?.value || 'sans-serif',
+                                 fontSize: `${fontSettings.fontSize}px`,
+                                 fontWeight: fontSettings.fontFamily === 'Aptos Black' ? 'bold' : 'normal'
+                               }}>
                             {segment.words && segment.words.length > 0 ? (
                               segment.words.map((word, wordIndex) => {
                                 const isCurrentWord = currentWord?.segmentIndex === segmentIndex && currentWord?.wordIndex === wordIndex;
@@ -727,7 +774,7 @@ export default function Home() {
                                   <span
                                     key={wordIndex}
                                     className={`
-                                      cursor-pointer transition-all duration-200 px-1 py-0.5 rounded text-base
+                                      cursor-pointer transition-all duration-200 px-1 py-0.5 rounded
                                       ${isCurrentWord 
                                         ? 'bg-yellow-300 text-black font-bold shadow-sm transform scale-105' 
                                         : isInCurrentSegment
@@ -756,7 +803,11 @@ export default function Home() {
                       <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                         <div className="flex items-center space-x-2">
                           <div className="w-3 h-3 bg-yellow-400 rounded-full animate-pulse"></div>
-                          <span className="text-sm text-yellow-800">
+                          <span className="text-sm text-yellow-800"
+                                style={{ 
+                                  fontFamily: availableFonts.find(f => f.name === fontSettings.fontFamily)?.value || 'sans-serif',
+                                  fontWeight: fontSettings.fontFamily === 'Aptos Black' ? 'bold' : 'normal'
+                                }}>
                             Currently speaking: <strong>{wordSegments[currentWord.segmentIndex]?.words[currentWord.wordIndex]?.word}</strong>
                           </span>
                         </div>
@@ -780,6 +831,53 @@ export default function Home() {
           <p>Powered by Kurt Pogi • Secure & Private • Word-Level Precision</p>
         </div>
       </div>
+
+      <style jsx>{`
+        .slider::-webkit-slider-thumb {
+          appearance: none;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #3B82F6;
+          cursor: pointer;
+          border: 2px solid white;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+          transition: all 0.2s;
+        }
+        
+        .slider::-webkit-slider-thumb:hover {
+          background: #2563EB;
+          transform: scale(1.1);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        .slider::-moz-range-thumb {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #3B82F6;
+          cursor: pointer;
+          border: 2px solid white;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Poppins:wght@400;700&display=swap');
+        
+        /* Aptos font fallback */
+        @font-face {
+          font-family: 'Aptos';
+          src: local('Aptos'), local('Aptos-Regular');
+          font-weight: normal;
+          font-style: normal;
+        }
+        
+        @font-face {
+          font-family: 'Aptos';
+          src: local('Aptos Black'), local('Aptos-Black');
+          font-weight: bold;
+          font-style: normal;
+        }
+      `}</style>
     </div>
   );
 }
