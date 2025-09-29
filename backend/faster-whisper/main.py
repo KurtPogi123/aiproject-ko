@@ -170,7 +170,8 @@ async def create_advanced_word_karaoke(
         ]
 
         print("Running FFmpeg command:", " ".join(command))
-        result = subprocess.run(command, capture_output=True, text=True, timeout=900)
+        result = subprocess.run(" ".join(command), shell=True, capture_output=True, text=True, timeout=900)
+
 
         if result.returncode != 0:
             print(f"FFmpeg error: {result.stderr[-1000:]}")
@@ -508,8 +509,8 @@ async def create_simple_word_karaoke_video(input_path: str, all_words: list, out
             output_path
         ]
 
-        print("Running fallback FFmpeg command...")
-        result = subprocess.run(command, capture_output=True, text=True, timeout=600)
+        print("Running FFmpeg command:", " ".join(command))
+        result = subprocess.run(" ".join(command), shell=True, capture_output=True, text=True, timeout=600)
         
         if result.returncode != 0:
             return {
