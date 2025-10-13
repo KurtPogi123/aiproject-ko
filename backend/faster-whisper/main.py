@@ -201,7 +201,7 @@ async def create_advanced_word_karaoke(
         print("=== End ASS Content ===")
 
         output_path = f"advanced_output_{os.getpid()}.mp4"
-        ffmpeg_path = "C:/ffmpeg/ffmpeg.exe"
+        ffmpeg_path = "ffmpeg"
 
         subtitle_path_escaped = subtitle_file.replace("\\", "/").replace(":", "\\:")
 
