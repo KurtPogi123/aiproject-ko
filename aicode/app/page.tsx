@@ -13,8 +13,8 @@ import {
   Download,
   Type,
   Palette,
+  Maximize2,
 } from "lucide-react";
-import CopyModal from "../app/components/modals/copy";
 
 interface WordData {
   word: string;
@@ -33,6 +33,12 @@ interface WordSegment {
 interface FontSettings {
   fontFamily: string;
   fontSize: number;
+  textColor: string;
+  useStroke: boolean;
+  strokeWidth: number;
+  strokeColor: string;
+  backgroundColor: string;
+  borderColor: string;
 }
 
 export default function Home() {
@@ -46,29 +52,35 @@ export default function Home() {
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const [showCopyModal, setShowCopyModal] = useState<boolean>(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [srtContent, setSrtContent] = useState<string>("");
   const [currentSegment, setCurrentSegment] = useState<number>(-1);
   const [currentWord, setCurrentWord] = useState<{ segmentIndex: number; wordIndex: number } | null>(null);
   const [currentWordWindow, setCurrentWordWindow] = useState<WordData[]>([]);
+  const [editingWord, setEditingWord] = useState<{ segmentIndex: number; wordIndex: number } | null>(null);
+  const [editedWordValue, setEditedWordValue] = useState<string>("");
+  const [windowSize, setWindowSize] = useState<number>(6); // Default 6 words
   
-  // NEW: Font settings state
   const [fontSettings, setFontSettings] = useState<FontSettings>({
-    fontFamily: 'Roboto',
-    fontSize: 20
+    fontFamily: 'Aptos Black',
+    fontSize: 24,
+    textColor: '#FFFFFF',
+    useStroke: false,
+    strokeWidth: 2,
+    strokeColor: '#000000',
+    backgroundColor: '#F97316',
+    borderColor: '#1E40AF',
   });
+  const [selectedStyle, setSelectedStyle] = useState<'CORP' | 'Stuck'>('CORP');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
 
-  // Available fonts
   const availableFonts = [
     { name: 'Roboto', value: 'Roboto, sans-serif' },
     { name: 'Poppins', value: 'Poppins, sans-serif' },
     { name: 'Aptos Black', value: 'Aptos, -apple-system, BlinkMacSystemFont, sans-serif' }
   ];
 
-  // Create and clean up video URL
   useEffect(() => {
     if (file && file.type.startsWith("video/")) {
       const url = URL.createObjectURL(file);
@@ -80,18 +92,15 @@ export default function Home() {
     }
   }, [file]);
 
-  // UPDATED: Enhanced time update handler for word-level highlighting
   const handleTimeUpdate = () => {
     if (videoRef.current && segments.length > 0) {
       const currentTime = videoRef.current.currentTime;
 
-      // Find current segment
       const activeSegmentIndex = segments.findIndex(
         (segment) => currentTime >= segment.start && currentTime <= segment.end
       );
-      setCurrentSegment(activeSegmentIndex);
+      setCurrentSegment(activeSegmentIndex >= 0 ? activeSegmentIndex : -1);
 
-      // Find current word and create a window of 5-6 words
       if (wordSegments.length > 0) {
         let foundWord = null;
         let wordWindow: SetStateAction<WordData[]> = [];
@@ -104,18 +113,13 @@ export default function Home() {
               if (currentTime >= word.start && currentTime <= word.end) {
                 foundWord = { segmentIndex: segIndex, wordIndex };
 
-                // Create a window of 5-6 words centered around the current word
-                const windowSize = 6; // Target 5-6 words
-                const wordsBefore = Math.floor(windowSize / 2); // e.g., 3 words before
-                const wordsAfter = windowSize - wordsBefore - 1; // e.g., 2 words after
+                const wordsBefore = Math.floor(windowSize / 2);
+                const wordsAfter = windowSize - wordsBefore - 1;
 
-                // Calculate start and end indices for the window
                 let startIndex = Math.max(0, wordIndex - wordsBefore);
                 let endIndex = Math.min(segment.words.length, wordIndex + wordsAfter + 1);
 
-                // Adjust if we don't have enough words in the current segment
                 if (endIndex - startIndex < windowSize && segIndex < wordSegments.length - 1) {
-                  // Try to pull words from the next segment
                   const nextSegment = wordSegments[segIndex + 1];
                   if (nextSegment?.words) {
                     const additionalWords = nextSegment.words.slice(0, windowSize - (endIndex - startIndex));
@@ -142,7 +146,6 @@ export default function Home() {
     }
   };
 
-  // Click to seek function
   const handleSegmentClick = (segmentIndex: number) => {
     if (videoRef.current && segments[segmentIndex]) {
       videoRef.current.currentTime = segments[segmentIndex].start;
@@ -150,7 +153,6 @@ export default function Home() {
     }
   };
 
-  // Click word to seek
   const handleWordClick = (segmentIndex: number, wordIndex: number) => {
     if (videoRef.current && wordSegments[segmentIndex]?.words[wordIndex]) {
       videoRef.current.currentTime = wordSegments[segmentIndex].words[wordIndex].start;
@@ -158,16 +160,49 @@ export default function Home() {
     }
   };
 
-  // Font setting handlers
-  const handleFontChange = (fontFamily: string) => {
-    setFontSettings(prev => ({ ...prev, fontFamily }));
+  const handleWordDoubleClick = (segmentIndex: number, wordIndex: number, currentWord: string) => {
+    setEditingWord({ segmentIndex, wordIndex });
+    setEditedWordValue(currentWord.trim());
   };
 
-  const handleFontSizeChange = (fontSize: number) => {
-    setFontSettings(prev => ({ ...prev, fontSize }));
+  const handleWordEdit = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && editingWord) {
+      saveWordEdit();
+    } else if (e.key === 'Escape') {
+      cancelWordEdit();
+    }
   };
 
-  // UPDATED: Use word-level transcription endpoint
+  const saveWordEdit = () => {
+    if (!editingWord || !editedWordValue.trim()) {
+      cancelWordEdit();
+      return;
+    }
+
+    const updatedWordSegments = [...wordSegments];
+    if (updatedWordSegments[editingWord.segmentIndex]?.words[editingWord.wordIndex]) {
+      updatedWordSegments[editingWord.segmentIndex].words[editingWord.wordIndex].word = " " + editedWordValue.trim();
+      
+      const segment = updatedWordSegments[editingWord.segmentIndex];
+      segment.segment_text = segment.words.map(w => w.word.trim()).join(' ');
+      
+      setWordSegments(updatedWordSegments);
+      
+      const newTranscript = updatedWordSegments
+        .map(seg => seg.words.map(w => w.word.trim()).join(' '))
+        .join(' ');
+      setTranscript(newTranscript);
+    }
+
+    setEditingWord(null);
+    setEditedWordValue("");
+  };
+
+  const cancelWordEdit = () => {
+    setEditingWord(null);
+    setEditedWordValue("");
+  };
+
   const handleUpload = async () => {
     if (!file) return;
 
@@ -183,7 +218,7 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("https://aiproject-ko-production.up.railway.app/transcribe-with-words", {
+      const res = await fetch("http://localhost:8000/transcribe-with-words", {
         method: "POST",
         body: formData,
       });
@@ -203,95 +238,56 @@ export default function Home() {
     }
   };
 
-  // UPDATED: Advanced word karaoke video download with font settings
   const handleDownloadAdvancedWordKaraoke = async () => {
     if (!file || !file.type.startsWith('video/')) return;
 
     setIsProcessingVideo(true);
     setError("");
 
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("fontFamily", fontSettings.fontFamily);
-      formData.append("fontSize", fontSettings.fontSize.toString());
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("fontFamily", fontSettings.fontFamily);
+    
+    const videoFontSize = Math.round(fontSettings.fontSize * 3.5);
+    formData.append("fontSize", videoFontSize.toString());
+    
+    formData.append("textColor", fontSettings.textColor);
+    formData.append("useStroke", fontSettings.useStroke.toString());
+    formData.append("strokeWidth", fontSettings.strokeWidth.toString());
+    formData.append("strokeColor", fontSettings.strokeColor);
+    formData.append("backgroundColor", fontSettings.backgroundColor);
+    formData.append("borderColor", fontSettings.borderColor);
+    formData.append("selectedStyle", selectedStyle);
+    formData.append("windowSize", windowSize.toString()); // Send window size to backend
+    
+    if (wordSegments.length > 0) {
+      formData.append("editedWordSegments", JSON.stringify(wordSegments));
+    }
 
-      const res = await fetch("https://aiproject-ko-production.up.railway.app/create-advanced-word-karaoke", {
+    try {
+      const res = await fetch("http://localhost:8000/create-advanced-word-karaoke", {
         method: "POST",
         body: formData,
       });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || `Server error: ${res.status}`);
-      }
-
-      const videoBlob = await res.blob();
-      
-      const url = URL.createObjectURL(videoBlob);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `advanced_word_karaoke_${file.name}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
+      window.URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create advanced word karaoke video");
-    } finally {
-      setIsProcessingVideo(false);
-    }
-  };
-
-  const handleCreateSubtitledVideo = async () => {
-    if (!file) return;
-
-    setIsProcessingVideo(true);
-    setError("");
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await fetch("https://aiproject-ko-production.up.railway.app/transcribe-with-video", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        throw new Error(`Server error: ${res.status}`);
-      }
-
-      const data = await res.json();
-      
-      if (data.success) {
-        setTranscript(data.transcript || "No transcript found");
-        setSegments(data.segments || []);
-        setSrtContent(data.srt_content || "");
+      if (err instanceof Error) {
+        setError(err.message);
       } else {
-        throw new Error(data.error || "Failed to create karaoke data");
+        setError(String(err));
       }
-      
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create karaoke data");
     } finally {
       setIsProcessingVideo(false);
     }
-  };
-
-  const handleDownloadSRT = () => {
-    if (!srtContent || !file) return;
-    
-    const blob = new Blob([srtContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${file.name.replace(/\.[^/.]+$/, "")}.srt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
   const handleFileSelect = (selectedFile: File) => {
@@ -306,7 +302,6 @@ export default function Home() {
       setTranscript("");
       setSegments([]);
       setWordSegments([]);
-      setSrtContent("");
       setCurrentSegment(-1);
       setCurrentWord(null);
     } else {
@@ -351,7 +346,6 @@ export default function Home() {
     setTranscript("");
     setSegments([]);
     setWordSegments([]);
-    setSrtContent("");
     setCurrentSegment(-1);
     setCurrentWord(null);
     if (fileInputRef.current) {
@@ -391,10 +385,73 @@ export default function Home() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const getTextStyle = () => {
+    if (fontSettings.useStroke) {
+      return {
+        color: fontSettings.textColor,
+        textShadow: `
+          -${fontSettings.strokeWidth}px -${fontSettings.strokeWidth}px 0 ${fontSettings.strokeColor},
+          ${fontSettings.strokeWidth}px -${fontSettings.strokeWidth}px 0 ${fontSettings.strokeColor},
+          -${fontSettings.strokeWidth}px ${fontSettings.strokeWidth}px 0 ${fontSettings.strokeColor},
+          ${fontSettings.strokeWidth}px ${fontSettings.strokeWidth}px 0 ${fontSettings.strokeColor},
+          -${fontSettings.strokeWidth}px 0px 0 ${fontSettings.strokeColor},
+          ${fontSettings.strokeWidth}px 0px 0 ${fontSettings.strokeColor},
+          0px -${fontSettings.strokeWidth}px 0 ${fontSettings.strokeColor},
+          0px ${fontSettings.strokeWidth}px 0 ${fontSettings.strokeColor}
+        `
+      };
+    } else {
+      return {
+        color: fontSettings.textColor
+      };
+    }
+  };
+
+  const applyCORPStyle = () => {
+    setSelectedStyle('CORP');
+    setFontSettings({
+      fontFamily: 'Aptos Black',
+      fontSize: 24,
+      textColor: '#FFFFFF',
+      useStroke: false,
+      strokeWidth: 2,
+      strokeColor: '#000000',
+      backgroundColor: '#F97316',
+      borderColor: '#1E40AF',
+    });
+  };
+
+  const applyStuckStyle = () => {
+    setSelectedStyle('Stuck');
+    setFontSettings({
+      fontFamily: 'Aptos Black',
+      fontSize: 24,
+      textColor: '#10B981',
+      useStroke: false,
+      strokeWidth: 2,
+      strokeColor: '#000000',
+      backgroundColor: '#F3F4F6',
+      borderColor: '#6B7280',
+    });
+  };
+
+  // Get preview text based on current word window
+  const getPreviewText = () => {
+    if (currentWordWindow.length > 0) {
+      return currentWordWindow.slice(0, windowSize).map(w => w.word.trim()).join(' ');
+    }
+    if (wordSegments.length > 0 && currentSegment >= 0) {
+      const segment = wordSegments[currentSegment];
+      if (segment?.words) {
+        return segment.words.slice(0, windowSize).map(w => w.word.trim()).join(' ');
+      }
+    }
+    return "Sample karaoke text preview";
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center space-x-3 mb-4">
             <div className="p-3 bg-white rounded-full shadow-lg">
@@ -403,11 +460,10 @@ export default function Home() {
             <h1 className="text-4xl font-bold text-gray-900">AI Karaoke Transcriber</h1>
           </div>
           <p className="text-gray-600 text-lg">
-            Transform your audio and video files into subtitled videos with word-level highlighting
+            Transform your audio and video files into subtitled videos with customizable word display
           </p>
         </div>
 
-        {/* Drag & Drop Area */}
         <div
           className={`
             relative border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 cursor-pointer
@@ -506,7 +562,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* Loading States */}
         {(isLoading || isProcessingVideo) && (
           <div className="mt-8 bg-white rounded-2xl shadow-lg p-8">
             <div className="flex flex-col items-center space-y-6">
@@ -515,16 +570,16 @@ export default function Home() {
               </div>
               <div className="text-center">
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  {isLoading ? "Transcribing with word timestamps..." : "Creating Video data..."}
+                  {isLoading ? "Transcribing with word timestamps..." : "Creating karaoke video..."}
                 </h3>
                 <p className="text-gray-600 mb-1">
                   {isLoading 
                     ? `AI is processing ${file?.type?.includes("video") ? "video" : "audio"} with word-level precision`
-                    : "Processing timing information for Video mode..."
+                    : "Applying your custom styling and generating video..."
                   }
                 </p>
                 <p className="text-sm text-gray-500">
-                  Word-level processing takes longer but provides precise highlighting
+                  This may take a few minutes
                 </p>
               </div>
 
@@ -535,7 +590,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Error Message */}
         {error && (
           <div className="mt-8 bg-red-50 border border-red-200 rounded-2xl p-6">
             <div className="flex items-center space-x-3">
@@ -548,31 +602,28 @@ export default function Home() {
           </div>
         )}
 
-        {/* Karaoke Video with Live Captions */}
         {segments.length > 0 && file && file.type.startsWith("video/") && videoUrl && (
           <div className="mt-8 bg-white rounded-2xl shadow-lg overflow-hidden">
             <div className="bg-purple-900 text-white p-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold flex items-center space-x-3">
                   <Video className="w-6 h-6 text-purple-300" />
-                  <span>Video with Word-Level Captions</span>
+                  <span>Video Preview with Live Captions</span>
                 </h2>
                 <div className="flex flex-wrap gap-2">
                   {file?.type.startsWith('video/') && (
-                    <>
-                      <button
-                        onClick={handleDownloadAdvancedWordKaraoke}
-                        disabled={isProcessingVideo}
-                        className="bg-green-600 hover:bg-green-700 disabled:opacity-50 px-3 py-2 rounded-lg transition-colors flex items-center space-x-2 text-sm"
-                      >
-                        {isProcessingVideo ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Download className="w-4 h-4" />
-                        )}
-                        <span>Download</span>
-                      </button>
-                    </>
+                    <button
+                      onClick={handleDownloadAdvancedWordKaraoke}
+                      disabled={isProcessingVideo}
+                      className="bg-green-600 hover:bg-green-700 disabled:opacity-50 px-4 py-2 rounded-lg transition-colors flex items-center space-x-2 text-sm font-semibold"
+                    >
+                      {isProcessingVideo ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
+                      <span>Download Karaoke Video</span>
+                    </button>
                   )}
                 </div>
               </div>
@@ -588,32 +639,20 @@ export default function Home() {
                   onTimeUpdate={handleTimeUpdate}
                 />
                 
-                {/* Live Caption Overlay with Dynamic Font Settings */}
-                {currentSegment >= 0 && segments[currentSegment] && currentWordWindow.length > 0 && (
-                  <div className="absolute bottom-20 left-0 right-0 text-center px-4">
-                    <div className="inline-block bg-black bg-opacity-90 text-white px-6 py-4 rounded-lg max-w-5xl"
-                         style={{ 
-                           fontFamily: availableFonts.find(f => f.name === fontSettings.fontFamily)?.value || 'sans-serif',
-                           fontSize: `${fontSettings.fontSize}px`,
-                           fontWeight: fontSettings.fontFamily === 'Aptos Black' ? 'bold' : 'normal'
-                         }}>
-                      <div className="flex flex-wrap justify-center gap-1">
-                        {currentWordWindow.map((word, index) => {
-                          const isCurrentWord = currentWord && wordSegments[currentWord.segmentIndex]?.words[currentWord.wordIndex]?.word === word.word;
-                          return (
-                            <span
-                              key={index}
-                              className={`transition-all duration-200 ${
-                                isCurrentWord
-                                  ? 'bg-yellow-400 text-black px-1 rounded transform scale-110'
-                                  : 'text-white'
-                              }`}
-                            >
-                              {word.word}
-                            </span>
-                          );
-                        })}
-                      </div>
+                {file && file.type.startsWith("video/") && videoUrl && wordSegments.length > 0 && currentSegment >= 0 && (
+                  <div className="absolute bottom-4 left-0 right-0 text-center px-4">
+                    <div 
+                      className="inline-block px-6 py-4 rounded-lg"
+                      style={{ 
+                        fontFamily: availableFonts.find(f => f.name === fontSettings.fontFamily)?.value || 'sans-serif',
+                        fontSize: `${fontSettings.fontSize}px`,
+                        backgroundColor: fontSettings.backgroundColor,
+                        border: `4px solid ${fontSettings.borderColor}`,
+                        fontWeight: 'bold',
+                        ...getTextStyle(),
+                      }}
+                    >
+                      {getPreviewText()}
                     </div>
                   </div>
                 )}
@@ -622,19 +661,18 @@ export default function Home() {
           </div>
         )}
 
-        {/* Word-Level Transcript with Font Controls */}
         {transcript && !isLoading && (
           <div className="mt-8 bg-white rounded-2xl shadow-lg overflow-hidden">
             <div className="bg-gray-900 text-white p-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold flex items-center space-x-3">
                   <CheckCircle className="w-6 h-6 text-green-400" />
-                  <span>Word-Level Interactive Transcript</span>
+                  <span>Caption Styling & Transcript</span>
                 </h2>
                 <div className="flex space-x-3">
                   <button
                     onClick={handleCopyText}
-                    className="bg-opacity-10 hover:bg-opacity-20 px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
+                    className="bg-white bg-opacity-10 hover:bg-opacity-20 px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
                   >
                     <Copy className="w-4 h-4" />
                     <span>Copy</span>
@@ -643,107 +681,303 @@ export default function Home() {
               </div>
             </div>
 
-            {/* NEW: Font Customization Panel */}
-            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-b p-6">
-              <div className="flex items-center space-x-4 mb-4">
-                <Type className="w-5 h-5 text-blue-600" />
-                <h3 className="text-lg font-semibold text-gray-800">Font Settings</h3>
-                <Palette className="w-4 h-4 text-purple-600" />
+            {/* WORD WINDOW SIZE CONTROL */}
+            <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border-b p-6">
+              <div className="flex items-center space-x-4 mb-6">
+                <Maximize2 className="w-6 h-6 text-orange-600" />
+                <h3 className="text-xl font-semibold text-gray-800">Words Display Limit</h3>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Font Family Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Font Family
-                  </label>
-                  <div className="grid grid-cols-1 gap-2">
-                    {availableFonts.map((font) => (
-                      <button
-                        key={font.name}
-                        onClick={() => handleFontChange(font.name)}
-                        className={`
-                          p-3 rounded-lg border-2 transition-all duration-200 text-left
-                          ${fontSettings.fontFamily === font.name 
-                            ? 'border-blue-500 bg-blue-50 text-blue-900' 
-                            : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50'
-                          }
-                        `}
-                        style={{ 
-                          fontFamily: font.value,
-                          fontWeight: font.name === 'Aptos Black' ? 'bold' : 'normal'
-                        }}
-                      >
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium">{font.name}</span>
-                          <span className="text-sm text-gray-500" style={{ fontFamily: font.value }}>
-                            Sample Text
-                          </span>
-                        </div>
-                      </button>
-                    ))}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Maximum words on screen: <span className="text-orange-600 font-bold text-lg">{windowSize} {windowSize === 1 ? 'word' : 'words'}</span>
+                </label>
+                <div className="space-y-4">
+                  <div 
+                    className="p-6 rounded-lg border-2 border-gray-200 bg-gray-800"
+                  >
+                    <div 
+                      className="text-center"
+                      style={{ 
+                        fontFamily: availableFonts.find(f => f.name === fontSettings.fontFamily)?.value || 'sans-serif',
+                        fontSize: `${fontSettings.fontSize}px`,
+                        fontWeight: fontSettings.fontFamily === 'Aptos Black' ? 'bold' : 'normal',
+                        color: fontSettings.textColor,
+                      }}
+                    >
+                      {Array.from({length: windowSize}, (_, i) => `Word${i+1}`).join(' ')}
+                    </div>
+                    <p className="text-center text-xs text-gray-400 mt-2">
+                      Preview: {windowSize} {windowSize === 1 ? 'word' : 'words'} will appear at once
+                    </p>
                   </div>
-                </div>
-
-                {/* Font Size Slider */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Font Size: <span className="text-blue-600 font-bold">{fontSettings.fontSize}px</span>
-                  </label>
-                  <div className="space-y-4">
-                    {/* Preview */}
-                    <div className="bg-white p-4 rounded-lg border border-gray-200">
-                      <div 
-                        className="text-gray-800"
-                        style={{ 
-                          fontFamily: availableFonts.find(f => f.name === fontSettings.fontFamily)?.value || 'sans-serif',
-                          fontSize: `${fontSettings.fontSize}px`,
-                          fontWeight: fontSettings.fontFamily === 'Aptos Black' ? 'bold' : 'normal'
-                        }}
-                      >
-                        Preview: This is how your captions will look
-                      </div>
-                    </div>
-                    
-                    {/* Slider */}
-                    <div className="relative">
-                      <input
-                        type="range"
-                        min="12"
-                        max="36"
-                        step="1"
-                        value={fontSettings.fontSize}
-                        onChange={(e) => handleFontSizeChange(parseInt(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-                        style={{
-                          background: `linear-gradient(to right, #3B82F6 0%, #3B82F6 ${((fontSettings.fontSize - 12) / (36 - 12)) * 100}%, #E5E7EB ${((fontSettings.fontSize - 12) / (36 - 12)) * 100}%, #E5E7EB 100%)`
-                        }}
-                      />
-                      <div className="flex justify-between text-xs text-gray-500 mt-2">
-                        <span>Small (12px)</span>
-                        <span>Medium (24px)</span>
-                        <span>Large (36px)</span>
-                      </div>
-                    </div>
+                  
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    step="1"
+                    value={windowSize}
+                    onChange={(e) => setWindowSize(parseInt(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>1 word</span>
+                    <span>5 words</span>
+                    <span>10 words</span>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-800">
+                      <strong>💡 Tip:</strong> Fewer words (1-3) create a TikTok/Reels style effect. More words (6-10) show more context like traditional karaoke.
+                    </p>
                   </div>
                 </div>
               </div>
             </div>
 
+            {/* CAPTION STYLING SECTION */}
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-b p-6">
+              <div className="flex items-center space-x-4 mb-6">
+                <Type className="w-6 h-6 text-blue-600" />
+                <h3 className="text-xl font-semibold text-gray-800">Caption Style Settings</h3>
+                <Palette className="w-5 h-5 text-purple-600" />
+              </div>
+              
+              {/* Style Selection Buttons */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Select Style
+                </label>
+                <div className="flex gap-4">
+                  <button
+                    onClick={applyCORPStyle}
+                    className={`
+                      px-4 py-2 rounded-lg border-2 transition-all duration-200
+                      ${selectedStyle === 'CORP' ? 'border-blue-500 bg-blue-50 text-blue-900' : 'border-gray-200 bg-white hover:border-blue-300'}
+                    `}
+                  >
+                    CORP Style
+                  </button>
+                  <button
+                    onClick={applyStuckStyle}
+                    className={`
+                      px-4 py-2 rounded-lg border-2 transition-all duration-200
+                      ${selectedStyle === 'Stuck' ? 'border-blue-500 bg-blue-50 text-blue-900' : 'border-gray-200 bg-white hover:border-blue-300'}
+                    `}
+                  >
+                    Stuck Style
+                  </button>
+                </div>
+              </div>
+
+              {/* Font Family Selection */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Font Family
+                </label>
+                <div className="grid grid-cols-1 gap-2">
+                  {availableFonts.map((font) => (
+                    <button
+                      key={font.name}
+                      onClick={() => setFontSettings(prev => ({ ...prev, fontFamily: font.name }))}
+                      className={`
+                        p-3 rounded-lg border-2 transition-all duration-200 text-left
+                        ${fontSettings.fontFamily === font.name 
+                          ? 'border-blue-500 bg-blue-50 text-blue-900' 
+                          : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50'
+                        }
+                      `}
+                      style={{ 
+                        fontFamily: font.value,
+                        fontWeight: font.name === 'Aptos Black' ? 'bold' : 'normal'
+                      }}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">{font.name}</span>
+                        <span className="text-sm text-gray-500" style={{ fontFamily: font.value }}>
+                          Sample Text
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Font Size */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Font Size: <span className="text-blue-600 font-bold">{fontSettings.fontSize}px</span>
+                </label>
+                <div className="space-y-4">
+                  <div 
+                    className={`p-6 rounded-lg border-2 border-gray-200 ${
+                      fontSettings.useStroke ? 'bg-gray-800' : 'bg-white'
+                    }`}
+                  >
+                    <div 
+                      style={{ 
+                        fontFamily: availableFonts.find(f => f.name === fontSettings.fontFamily)?.value || 'sans-serif',
+                        fontSize: `${fontSettings.fontSize}px`,
+                        fontWeight: fontSettings.fontFamily === 'Aptos Black' ? 'bold' : 'normal',
+                        ...getTextStyle()
+                      }}
+                    >
+                      Preview: Karaoke caption style
+                    </div>
+                  </div>
+                  
+                  <input
+                    type="range"
+                    min="12"
+                    max="48"
+                    step="1"
+                    value={fontSettings.fontSize}
+                    onChange={(e) => setFontSettings(prev => ({ ...prev, fontSize: parseInt(e.target.value) }))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>Small (12px)</span>
+                    <span>Medium (30px)</span>
+                    <span>Large (48px)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Color Settings */}
+              <div className="mb-6 p-4 bg-white rounded-lg border-2 border-gray-200">
+                <h4 className="text-sm font-medium text-gray-700 mb-4 flex items-center space-x-2">
+                  <Palette className="w-4 h-4" />
+                  <span>Text Color</span>
+                </h4>
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="color"
+                    value={fontSettings.textColor}
+                    onChange={(e) => setFontSettings(prev => ({ ...prev, textColor: e.target.value }))}
+                    className="w-16 h-16 rounded-lg border-2 border-gray-300 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={fontSettings.textColor}
+                      onChange={(e) => setFontSettings(prev => ({ ...prev, textColor: e.target.value }))}
+                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm font-mono uppercase"
+                      placeholder="#FFFFFF"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Main caption text color</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Caption Style Toggle */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Caption Background Style
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button
+                    onClick={() => setFontSettings(prev => ({ ...prev, useStroke: false }))}
+                    className={`
+                      p-4 rounded-lg border-2 transition-all duration-200
+                      ${!fontSettings.useStroke 
+                        ? 'border-blue-500 bg-blue-50' 
+                        : 'border-gray-200 bg-white hover:border-blue-300'
+                      }
+                    `}
+                  >
+                    <div className="flex flex-col items-center space-y-2">
+                      <div className="bg-black bg-opacity-90 text-white px-4 py-2 rounded text-sm">
+                        Sample Text
+                      </div>
+                      <span className="text-sm font-medium text-gray-700">Black Background Box</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setFontSettings(prev => ({ ...prev, useStroke: true }))}
+                    className={`
+                      p-4 rounded-lg border-2 transition-all duration-200
+                      ${fontSettings.useStroke 
+                        ? 'border-blue-500 bg-blue-50' 
+                        : 'border-gray-200 bg-white hover:border-blue-300'
+                      }
+                    `}
+                  >
+                    <div className="flex flex-col items-center space-y-2">
+                      <div className="bg-gray-700 px-4 py-2 rounded">
+                        <span 
+                          className="text-white text-sm"
+                          style={{
+                            textShadow: '-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000'
+                          }}
+                        >
+                          Sample Text
+                        </span>
+                      </div>
+                      <span className="text-sm font-medium text-gray-700">Text Stroke/Outline</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Stroke Settings */}
+              {fontSettings.useStroke && (
+                <div className="p-4 bg-white rounded-lg border-2 border-gray-200">
+                  <h4 className="text-sm font-medium text-gray-700 mb-4">Outline Settings</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-2">
+                        Outline Width: <span className="font-bold text-blue-600">{fontSettings.strokeWidth}px</span>
+                      </label>
+                      <input
+                        type="range"
+                        min="1"
+                        max="5"
+                        step="0.5"
+                        value={fontSettings.strokeWidth}
+                        onChange={(e) => setFontSettings(prev => ({ ...prev, strokeWidth: parseFloat(e.target.value) }))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-2">
+                        Outline Color
+                      </label>
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="color"
+                          value={fontSettings.strokeColor}
+                          onChange={(e) => setFontSettings(prev => ({ ...prev, strokeColor: e.target.value }))}
+                          className="w-12 h-12 rounded border-2 border-gray-300 cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={fontSettings.strokeColor}
+                          onChange={(e) => setFontSettings(prev => ({ ...prev, strokeColor: e.target.value }))}
+                          className="flex-1 px-3 py-2 border-2 border-gray-300 rounded text-sm font-mono uppercase"
+                          placeholder="#000000"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Interactive Transcript */}
             <div className="p-6">
               <div className="w-full space-y-4">
-                {/* Word-Level Interactive Transcript with Dynamic Fonts */}
                 {wordSegments.length > 0 && (
                   <div className="bg-gray-50 rounded-xl p-4 max-h-96 overflow-y-auto" ref={transcriptRef}>
                     <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-semibold text-gray-800">Word-by-Word Transcript</h3>
-                      <p className="text-sm text-gray-500">Click any word to jump to that moment</p>
+                      <h3 className="font-semibold text-gray-800">Word-by-Word Interactive Transcript</h3>
+                      <p className="text-sm text-gray-500">Click to jump • Double-click to edit</p>
                     </div>
                     <div className="space-y-4">
                       {wordSegments.map((segment, segmentIndex) => (
                         <div 
                           key={segmentIndex} 
-                          data-segment-index={segmentIndex}
                           className={`
                             p-4 rounded-lg border transition-all duration-300
                             ${segmentIndex === currentSegment 
@@ -758,17 +992,38 @@ export default function Home() {
                             </span>
                           </div>
                           
-                          {/* Word-by-word rendering with dynamic font settings */}
                           <div className="flex flex-wrap gap-1 leading-relaxed"
                                style={{ 
                                  fontFamily: availableFonts.find(f => f.name === fontSettings.fontFamily)?.value || 'sans-serif',
-                                 fontSize: `${fontSettings.fontSize}px`,
+                                 fontSize: `${Math.min(fontSettings.fontSize, 18)}px`,
                                  fontWeight: fontSettings.fontFamily === 'Aptos Black' ? 'bold' : 'normal'
                                }}>
                             {segment.words && segment.words.length > 0 ? (
                               segment.words.map((word, wordIndex) => {
                                 const isCurrentWord = currentWord?.segmentIndex === segmentIndex && currentWord?.wordIndex === wordIndex;
                                 const isInCurrentSegment = segmentIndex === currentSegment;
+                                const isEditing = editingWord?.segmentIndex === segmentIndex && editingWord?.wordIndex === wordIndex;
+                                
+                                if (isEditing) {
+                                  return (
+                                    <input
+                                      key={wordIndex}
+                                      type="text"
+                                      value={editedWordValue}
+                                      onChange={(e) => setEditedWordValue(e.target.value)}
+                                      onKeyDown={handleWordEdit}
+                                      onBlur={saveWordEdit}
+                                      autoFocus
+                                      className="px-2 py-1 border-2 border-blue-500 rounded bg-white text-gray-900 font-medium outline-none"
+                                      style={{
+                                        width: `${Math.max(50, editedWordValue.length * 10)}px`,
+                                        fontFamily: availableFonts.find(f => f.name === fontSettings.fontFamily)?.value || 'sans-serif',
+                                        fontSize: `${Math.min(fontSettings.fontSize, 18)}px`,
+                                        fontWeight: fontSettings.fontFamily === 'Aptos Black' ? 'bold' : 'normal'
+                                      }}
+                                    />
+                                  );
+                                }
                                 
                                 return (
                                   <span
@@ -783,14 +1038,14 @@ export default function Home() {
                                       }
                                     `}
                                     onClick={() => handleWordClick(segmentIndex, wordIndex)}
-                                    title={`${word.start.toFixed(1)}s - ${word.end.toFixed(1)}s`}
+                                    onDoubleClick={() => handleWordDoubleClick(segmentIndex, wordIndex, word.word)}
+                                    title={`Single click: Jump to ${word.start.toFixed(1)}s | Double click: Edit word`}
                                   >
                                     {word.word}
                                   </span>
                                 );
                               })
                             ) : (
-                              // Fallback for segments without word data
                               <span className="text-gray-800">{segment.segment_text}</span>
                             )}
                           </div>
@@ -798,7 +1053,6 @@ export default function Home() {
                       ))}
                     </div>
                     
-                    {/* Current word indicator */}
                     {currentWord && (
                       <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                         <div className="flex items-center space-x-2">
@@ -820,15 +1074,19 @@ export default function Home() {
           </div>
         )}
 
-        {/* Copy Success Modal */}
-        <CopyModal
-          isOpen={showCopyModal}
-          onClose={() => setShowCopyModal(false)}
-        />
+        {showCopyModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 shadow-xl">
+              <div className="flex items-center space-x-3">
+                <CheckCircle className="w-6 h-6 text-green-500" />
+                <p className="text-lg font-semibold">Copied to clipboard!</p>
+              </div>
+            </div>
+          </div>
+        )}
 
-        {/* Footer */}
         <div className="text-center mt-12 text-gray-500">
-          <p>Powered by Kurt Pogi • Secure & Private • Word-Level Precision</p>
+          <p>Powered by AI Transcription • Secure & Private • Word-Level Precision</p>
         </div>
       </div>
 
@@ -863,7 +1121,6 @@ export default function Home() {
 
         @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Poppins:wght@400;700&display=swap');
         
-        /* Aptos font fallback */
         @font-face {
           font-family: 'Aptos';
           src: local('Aptos'), local('Aptos-Regular');
