@@ -263,6 +263,10 @@ def hex_to_ass_color(hex_color: str, alpha: str = "00") -> str:
     ASS format: &HAABBGGRR where AA=alpha, BB=blue, GG=green, RR=red
     Alpha: 00=opaque, FF=transparent
     """
+    # Handle transparent color
+    if hex_color.lower() == 'transparent':
+        return "&HFF000000"  # Fully transparent
+    
     hex_color = hex_color.lstrip("#")
     r = int(hex_color[0:2], 16)
     g = int(hex_color[2:4], 16)
@@ -293,9 +297,9 @@ def create_windowed_word_level_ass_subtitle_with_fonts(
     if use_stroke:
         border_style = 1
         outline_color = hex_to_ass_color(stroke_color, "00")
-        back_color = "&H00000000"
+        back_color = hex_to_ass_color(background_color, "FF")  # Fully transparent background when using stroke
         outline_width = int(stroke_width)
-        shadow_depth = 1
+        shadow_depth = 0
     else:
         border_style = 4
         outline_color = hex_to_ass_color(border_color, "00")
@@ -393,7 +397,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             start_time = format_ass_time(window_start)
             end_time = format_ass_time(window_end)
 
-            padded_text = f"{inner_padding_spaces}{{\\k0}}{karaoke_text}{{\\k0}}{inner_padding_spaces}"
+            # Only add padding if we're using a background box (not using stroke)
+            if use_stroke:
+                padded_text = f"{{\\k0}}{karaoke_text}{{\\k0}}"
+            else:
+                padded_text = f"{inner_padding_spaces}{{\\k0}}{karaoke_text}{{\\k0}}{inner_padding_spaces}"
 
             events.append(
                 f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,karaoke,{padded_text}"

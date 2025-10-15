@@ -57,7 +57,7 @@ export default function Home() {
   const [currentWordWindow, setCurrentWordWindow] = useState<WordData[]>([]);
   const [editingWord, setEditingWord] = useState<{ segmentIndex: number; wordIndex: number } | null>(null);
   const [editedWordValue, setEditedWordValue] = useState<string>("");
-  const [windowSize, setWindowSize] = useState<number>(6); // Default 6 words
+  const [windowSize, setWindowSize] = useState<number>(6);
   
   const [fontSettings, setFontSettings] = useState<FontSettings>({
     fontFamily: 'Aptos Black',
@@ -69,7 +69,7 @@ export default function Home() {
     backgroundColor: '#F97316',
     borderColor: '#1E40AF',
   });
-  const [selectedStyle, setSelectedStyle] = useState<'CORP' | 'Stuck'>('CORP');
+  const [selectedStyle, setSelectedStyle] = useState<'CORP' | 'NoBackground'>('CORP');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -258,7 +258,7 @@ export default function Home() {
     formData.append("backgroundColor", fontSettings.backgroundColor);
     formData.append("borderColor", fontSettings.borderColor);
     formData.append("selectedStyle", selectedStyle);
-    formData.append("windowSize", windowSize.toString()); // Send window size to backend
+    formData.append("windowSize", windowSize.toString());
     
     if (wordSegments.length > 0) {
       formData.append("editedWordSegments", JSON.stringify(wordSegments));
@@ -421,21 +421,20 @@ export default function Home() {
     });
   };
 
-  const applyStuckStyle = () => {
-    setSelectedStyle('Stuck');
+  const applyNoBackgroundStyle = () => {
+    setSelectedStyle('NoBackground');
     setFontSettings({
       fontFamily: 'Aptos Black',
       fontSize: 24,
-      textColor: '#10B981',
-      useStroke: false,
-      strokeWidth: 2,
+      textColor: '#FFFFFF',
+      useStroke: true,
+      strokeWidth: 3,
       strokeColor: '#000000',
-      backgroundColor: '#F3F4F6',
-      borderColor: '#6B7280',
+      backgroundColor: 'transparent',
+      borderColor: 'transparent',
     });
   };
 
-  // Get preview text based on current word window
   const getPreviewText = () => {
     if (currentWordWindow.length > 0) {
       return currentWordWindow.slice(0, windowSize).map(w => w.word.trim()).join(' ');
@@ -681,7 +680,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* WORD WINDOW SIZE CONTROL */}
             <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border-b p-6">
               <div className="flex items-center space-x-4 mb-6">
                 <Maximize2 className="w-6 h-6 text-orange-600" />
@@ -735,7 +733,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* CAPTION STYLING SECTION */}
             <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-b p-6">
               <div className="flex items-center space-x-4 mb-6">
                 <Type className="w-6 h-6 text-blue-600" />
@@ -743,12 +740,11 @@ export default function Home() {
                 <Palette className="w-5 h-5 text-purple-600" />
               </div>
               
-              {/* Style Selection Buttons */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Select Style
                 </label>
-                <div className="flex gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button
                     onClick={applyCORPStyle}
                     className={`
@@ -759,18 +755,17 @@ export default function Home() {
                     CORP Style
                   </button>
                   <button
-                    onClick={applyStuckStyle}
+                    onClick={applyNoBackgroundStyle}
                     className={`
                       px-4 py-2 rounded-lg border-2 transition-all duration-200
-                      ${selectedStyle === 'Stuck' ? 'border-blue-500 bg-blue-50 text-blue-900' : 'border-gray-200 bg-white hover:border-blue-300'}
+                      ${selectedStyle === 'NoBackground' ? 'border-blue-500 bg-blue-50 text-blue-900' : 'border-gray-200 bg-white hover:border-blue-300'}
                     `}
                   >
-                    Stuck Style
+                    No Background
                   </button>
                 </div>
               </div>
 
-              {/* Font Family Selection */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Font Family
@@ -803,7 +798,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Font Size */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Font Size: <span className="text-blue-600 font-bold">{fontSettings.fontSize}px</span>
@@ -843,7 +837,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Color Settings */}
               <div className="mb-6 p-4 bg-white rounded-lg border-2 border-gray-200">
                 <h4 className="text-sm font-medium text-gray-700 mb-4 flex items-center space-x-2">
                   <Palette className="w-4 h-4" />
@@ -869,7 +862,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Caption Style Toggle */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Caption Background Style
@@ -920,7 +912,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Stroke Settings */}
               {fontSettings.useStroke && (
                 <div className="p-4 bg-white rounded-lg border-2 border-gray-200">
                   <h4 className="text-sm font-medium text-gray-700 mb-4">Outline Settings</h4>
@@ -965,7 +956,6 @@ export default function Home() {
               )}
             </div>
 
-            {/* Interactive Transcript */}
             <div className="p-6">
               <div className="w-full space-y-4">
                 {wordSegments.length > 0 && (
