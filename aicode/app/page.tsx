@@ -220,7 +220,7 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("https://aiproject-ko-eight.vercel.app/transcribe-with-words", {
+      const res = await fetch("https://aiproject-ko-production.up.railway.app/transcribe-with-words", {
         method: "POST",
         body: formData,
       });
@@ -268,7 +268,7 @@ export default function Home() {
     }
 
     try {
-      const res = await fetch("https://aiproject-ko-eight.vercel.app/create-advanced-word-karaoke", {
+      const res = await fetch("https://aiproject-ko-production.up.railway.app/create-advanced-word-karaoke", {
         method: "POST",
         body: formData,
       });
