@@ -136,12 +136,8 @@ async def create_advanced_word_karaoke(
         print(f"Creating advanced word karaoke for: {file.filename}")
         print(f"Selected Style: {selectedStyle}")
         print(f"Font: {fontFamily}, Size: {fontSize}px")
-        print(f"Text Color: {textColor}, Stroke: {useStroke}")
-        print(f"Stroke Width: {strokeWidth}, Stroke Color: {strokeColor}")
-        print(f"Background Color: {backgroundColor}, Border Color: {borderColor}")
-        print(f"Highlight Color: {highlightColor}")
-        print(f"Box Padding Left/Right: {boxPaddingLeftRight} spaces")
-        print(f"Window Size: {windowSize} words per screen")
+        print(f"Text Color: {textColor}, Highlight Color: {highlightColor}")
+        print(f"Window Size: {windowSize} words")
 
         input_path = f"advanced_input_{os.getpid()}.mp4"
         with open(input_path, "wb") as f:
@@ -173,7 +169,7 @@ async def create_advanced_word_karaoke(
 
         subtitle_file = f"advanced_subs_{os.getpid()}.ass"
 
-        ass_content = create_windowed_word_level_ass_subtitle_with_fonts(
+        ass_content = create_word_level_ass_with_color_changes(
             segments_list,
             fontFamily,
             int(fontSize),
@@ -191,14 +187,7 @@ async def create_advanced_word_karaoke(
         with open(subtitle_file, "w", encoding="utf-8") as f:
             f.write(ass_content)
 
-        debug_subtitle_file = f"DEBUG_subtitle_{selectedStyle}.ass"
-        with open(debug_subtitle_file, "w", encoding="utf-8") as f:
-            f.write(ass_content)
-        print(f"DEBUG: Saved ASS file to {debug_subtitle_file} for inspection")
-
-        print("=== ASS Subtitle Content (first 1000 chars) ===")
-        print(ass_content[:1000])
-        print("=== End ASS Content ===")
+        print("ASS Subtitle file created successfully")
 
         output_path = f"advanced_output_{os.getpid()}.mp4"
         ffmpeg_path = "ffmpeg"
@@ -216,7 +205,7 @@ async def create_advanced_word_karaoke(
             "-y", output_path
         ]
 
-        print("Running FFmpeg command:", " ".join(command))
+        print("Running FFmpeg...")
         result = subprocess.run(" ".join(command), shell=True, capture_output=True, text=True, timeout=900)
 
         if result.returncode != 0:
@@ -258,23 +247,30 @@ def get_font_name_for_ass(font_family: str) -> str:
 
 
 def hex_to_ass_color(hex_color: str, alpha: str = "00") -> str:
-    """
-    Convert hex color to ASS BGR format with alpha
-    ASS format: &HAABBGGRR where AA=alpha, BB=blue, GG=green, RR=red
-    Alpha: 00=opaque, FF=transparent
-    """
-    # Handle transparent color
+    """Convert hex color to ASS BGR format with alpha"""
     if hex_color.lower() == 'transparent':
-        return "&HFF000000"  # Fully transparent
+        return "&HFF000000"
     
     hex_color = hex_color.lstrip("#")
+    if len(hex_color) < 6:
+        hex_color = hex_color.ljust(6, '0')
+    
     r = int(hex_color[0:2], 16)
     g = int(hex_color[2:4], 16)
     b = int(hex_color[4:6], 16)
     return f"&H{alpha}{b:02X}{g:02X}{r:02X}"
 
 
-def create_windowed_word_level_ass_subtitle_with_fonts(
+def format_ass_time(seconds):
+    """Format seconds to ASS time format: H:MM:SS.CC"""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    centisecs = int((seconds % 1) * 100)
+    return f"{hours}:{minutes:02d}:{secs:02d}.{centisecs:02d}"
+
+
+def create_word_level_ass_with_color_changes(
     segments_list,
     font_family: str,
     font_size: int,
@@ -288,33 +284,32 @@ def create_windowed_word_level_ass_subtitle_with_fonts(
     box_padding_left_right: int = 15,
     window_size: int = 6
 ):
+    """Generate ASS subtitle file with per-word color highlighting"""
+    
     font_name = get_font_name_for_ass(font_family)
     font_weight = 1 if font_family == "Aptos Black" else 0
 
-    primary_color = hex_to_ass_color(text_color, "00")
-    secondary_color = hex_to_ass_color(highlight_color, "00")
+    text_color_ass = hex_to_ass_color(text_color, "00")
+    highlight_color_ass = hex_to_ass_color(highlight_color, "00")
 
     if use_stroke:
         border_style = 1
         outline_color = hex_to_ass_color(stroke_color, "00")
-        back_color = hex_to_ass_color(background_color, "FF")  # Fully transparent background when using stroke
+        back_color = hex_to_ass_color(background_color, "FF")
         outline_width = int(stroke_width)
-        shadow_depth = 0
     else:
         border_style = 4
         outline_color = hex_to_ass_color(border_color, "00")
         back_color = hex_to_ass_color(background_color, "00")
         outline_width = 4
-        shadow_depth = 0
 
     margin_v = 70
     margin_lr = 60
-    
-    inner_padding_spaces = " " * (box_padding_left_right * 3)
     letter_spacing = 2
 
+    # ASS file header
     ass_header = f"""[Script Info]
-Title: Windowed Word-Level Karaoke
+Title: Word-Level Karaoke
 ScriptType: v4.00+
 PlayResX: 1920
 PlayResY: 1080
@@ -323,7 +318,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{font_name},{font_size},{primary_color},{secondary_color},{outline_color},{back_color},{font_weight},0,0,0,100,100,{letter_spacing},0,{border_style},{outline_width},{shadow_depth},2,{margin_lr},{margin_lr},{margin_v},1
+Style: Default,{font_name},{font_size},{text_color_ass},{highlight_color_ass},{outline_color},{back_color},{font_weight},0,0,0,100,100,{letter_spacing},0,{border_style},{outline_width},0,2,{margin_lr},{margin_lr},{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -332,7 +327,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     events = []
     all_words = []
 
-    # Collect all words from segments
+    # Collect all words from all segments
     for segment in segments_list:
         if hasattr(segment, "words") and segment.words:
             for word in segment.words:
@@ -343,82 +338,53 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 })
 
     if not all_words:
-        print("WARNING: No words found for karaoke generation")
+        print("WARNING: No words found")
         return ass_header
 
-    print(f"Generating karaoke for {len(all_words)} words with window size {window_size}")
+    print(f"Total words: {len(all_words)}, window size: {window_size}")
 
-    processed_words = set()
+    # Process words in windows
     i = 0
-
     while i < len(all_words):
-        while i < len(all_words) and i in processed_words:
-            i += 1
-        if i >= len(all_words):
-            break
-
-        window_words = []
-        window_indices = []
-        j = i
-
-        # Use the configurable window_size parameter
-        while len(window_words) < window_size and j < len(all_words):
-            if j not in processed_words:
-                window_words.append(all_words[j])
-                window_indices.append(j)
-            j += 1
+        # Get window of words
+        window_start_idx = i
+        window_end_idx = min(i + window_size, len(all_words))
+        window_words = all_words[window_start_idx:window_end_idx]
 
         if not window_words:
             break
 
-        for idx in window_indices:
-            processed_words.add(idx)
+        # For each word in this window, create a subtitle line
+        for active_idx, active_word in enumerate(window_words):
+            subtitle_parts = []
+            
+            # Build text with: inactive + active (highlighted) + inactive
+            for display_idx, display_word in enumerate(window_words):
+                word_text = display_word["text"].strip()
+                
+                if display_idx == active_idx:
+                    # ACTIVE WORD - Use highlight color
+                    subtitle_parts.append(f"{{\\c{highlight_color_ass}&}}{word_text}{{\\r}}")
+                else:
+                    # INACTIVE WORD - Use text color
+                    subtitle_parts.append(f"{{\\c{text_color_ass}&}}{word_text}{{\\r}}")
+            
+            subtitle_text = " ".join(subtitle_parts)
+            padding = " " * box_padding_left_right if not use_stroke else ""
+            final_text = f"{padding}{subtitle_text}{padding}"
 
-        window_start = window_words[0]["start"]
-        window_end = window_words[-1]["end"]
-
-        karaoke_parts = []
-        for word in window_words:
-            duration = max(20, int((word["end"] - word["start"]) * 100))
-            clean_word = (
-                word["text"]
-                .replace("\\", "")
-                .replace("{", "")
-                .replace("}", "")
-                .replace("\n", " ")
-                .replace("\r", "")
-                .strip()
-            )
-            if clean_word:
-                karaoke_parts.append(f"{{\\k{duration}}}{clean_word}")
-
-        if karaoke_parts:
-            karaoke_text = " ".join(karaoke_parts)
-            start_time = format_ass_time(window_start)
-            end_time = format_ass_time(window_end)
-
-            # Only add padding if we're using a background box (not using stroke)
-            if use_stroke:
-                padded_text = f"{{\\k0}}{karaoke_text}{{\\k0}}"
-            else:
-                padded_text = f"{inner_padding_spaces}{{\\k0}}{karaoke_text}{{\\k0}}{inner_padding_spaces}"
+            # This subtitle only shows while this specific word is being spoken
+            word_start = format_ass_time(active_word["start"])
+            word_end = format_ass_time(active_word["end"])
 
             events.append(
-                f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,karaoke,{padded_text}"
+                f"Dialogue: 0,{word_start},{word_end},Default,,0,0,0,,{final_text}"
             )
 
-        i = j
+        i = window_end_idx
 
-    print(f"Generated {len(events)} karaoke dialogue events with {window_size} words per window")
+    print(f"Generated {len(events)} subtitle events")
     return ass_header + "\n".join(events)
-
-
-def format_ass_time(seconds):
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    centisecs = int((seconds % 1) * 100)
-    return f"{hours}:{minutes:02d}:{secs:02d}.{centisecs:02d}"
 
 
 @app.get("/health")
@@ -427,5 +393,5 @@ async def health_check():
 
 
 if __name__ == "__main__":
-    import uvicorn
+    import uvicorn 
     uvicorn.run(app, host="0.0.0.0", port=8000)

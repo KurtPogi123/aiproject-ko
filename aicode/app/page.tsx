@@ -1,4 +1,4 @@
-"use client";
+ "use client";
 import { useState, useRef, useEffect, SetStateAction } from "react";
 import {
   Upload,
@@ -39,6 +39,7 @@ interface FontSettings {
   strokeColor: string;
   backgroundColor: string;
   borderColor: string;
+  highlightColor: string;
 }
 
 export default function Home() {
@@ -68,6 +69,7 @@ export default function Home() {
     strokeColor: '#000000',
     backgroundColor: '#F97316',
     borderColor: '#1E40AF',
+    highlightColor: '#FFFF00',
   });
   const [selectedStyle, setSelectedStyle] = useState<'CORP' | 'NoBackground'>('CORP');
 
@@ -218,7 +220,7 @@ export default function Home() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("https://aiproject-ko-production.up.railway.app/transcribe-with-words", {
+      const res = await fetch("https://aiproject-ko-eight.vercel.app/transcribe-with-words", {
         method: "POST",
         body: formData,
       });
@@ -257,6 +259,7 @@ export default function Home() {
     formData.append("strokeColor", fontSettings.strokeColor);
     formData.append("backgroundColor", fontSettings.backgroundColor);
     formData.append("borderColor", fontSettings.borderColor);
+    formData.append("highlightColor", fontSettings.highlightColor);
     formData.append("selectedStyle", selectedStyle);
     formData.append("windowSize", windowSize.toString());
     
@@ -265,7 +268,7 @@ export default function Home() {
     }
 
     try {
-      const res = await fetch("https://aiproject-ko-production.up.railway.app/create-advanced-word-karaoke", {
+      const res = await fetch("https://aiproject-ko-eight.vercel.app/create-advanced-word-karaoke", {
         method: "POST",
         body: formData,
       });
@@ -418,6 +421,7 @@ export default function Home() {
       strokeColor: '#000000',
       backgroundColor: '#F97316',
       borderColor: '#1E40AF',
+      highlightColor: '#FFFF00',
     });
   };
 
@@ -432,20 +436,40 @@ export default function Home() {
       strokeColor: '#000000',
       backgroundColor: 'transparent',
       borderColor: 'transparent',
+      highlightColor: '#FFFF00',
     });
   };
 
   const getPreviewText = () => {
-    if (currentWordWindow.length > 0) {
-      return currentWordWindow.slice(0, windowSize).map(w => w.word.trim()).join(' ');
+    if (currentWordWindow.length > 0 && currentWord) {
+      return currentWordWindow.slice(0, windowSize).map((w, idx) => {
+        const isCurrentlyActive = 
+          currentWord.segmentIndex < wordSegments.length &&
+          wordSegments[currentWord.segmentIndex]?.words &&
+          currentWord.wordIndex < wordSegments[currentWord.segmentIndex].words.length &&
+          wordSegments[currentWord.segmentIndex].words[currentWord.wordIndex]?.word.trim() === w.word.trim();
+        
+        return {
+          text: w.word.trim(),
+          isActive: isCurrentlyActive
+        };
+      });
     }
     if (wordSegments.length > 0 && currentSegment >= 0) {
       const segment = wordSegments[currentSegment];
       if (segment?.words) {
-        return segment.words.slice(0, windowSize).map(w => w.word.trim()).join(' ');
+        return segment.words.slice(0, windowSize).map(w => ({
+          text: w.word.trim(),
+          isActive: false
+        }));
       }
     }
-    return "Sample karaoke text preview";
+    return [
+      { text: "Sample", isActive: false },
+      { text: "karaoke", isActive: true },
+      { text: "text", isActive: false },
+      { text: "preview", isActive: false }
+    ];
   };
 
   return (
@@ -651,7 +675,17 @@ export default function Home() {
                         ...getTextStyle(),
                       }}
                     >
-                      {getPreviewText()}
+                      {getPreviewText().map((wordObj, idx) => (
+                        <span 
+                          key={idx}
+                          style={{
+                            color: wordObj.isActive ? fontSettings.highlightColor : fontSettings.textColor,
+                            transition: 'color 0.1s ease'
+                          }}
+                        >
+                          {wordObj.text}{idx < getPreviewText().length - 1 ? ' ' : ''}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -859,6 +893,46 @@ export default function Home() {
                     />
                     <p className="text-xs text-gray-500 mt-1">Main caption text color</p>
                   </div>
+                </div>
+              </div>
+
+              <div className="mb-6 p-4 bg-white rounded-lg border-2 border-gray-200">
+                <h4 className="text-sm font-medium text-gray-700 mb-4 flex items-center space-x-2">
+                  <Palette className="w-4 h-4" />
+                  <span>Highlight Color</span>
+                </h4>
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="color"
+                    value={fontSettings.highlightColor}
+                    onChange={(e) => setFontSettings(prev => ({ ...prev, highlightColor: e.target.value }))}
+                    className="w-16 h-16 rounded-lg border-2 border-gray-300 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={fontSettings.highlightColor}
+                      onChange={(e) => setFontSettings(prev => ({ ...prev, highlightColor: e.target.value }))}
+                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg text-sm font-mono uppercase"
+                      placeholder="#FFFF00"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Color for the currently spoken word</p>
+                  </div>
+                </div>
+                <div className="mt-4 p-4 bg-gray-800 rounded-lg">
+                  <div className="text-center space-x-2"
+                       style={{ 
+                         fontFamily: availableFonts.find(f => f.name === fontSettings.fontFamily)?.value || 'sans-serif',
+                         fontSize: `${fontSettings.fontSize}px`,
+                         fontWeight: 'bold',
+                       }}>
+                    <span style={{ color: fontSettings.textColor }}>I</span>
+                    <span style={{ color: fontSettings.highlightColor }}>am</span>
+                    <span style={{ color: fontSettings.textColor }}>Juan</span>
+                  </div>
+                  <p className="text-center text-xs text-gray-400 mt-2">
+                    Preview: Only active word is highlighted
+                  </p>
                 </div>
               </div>
 
