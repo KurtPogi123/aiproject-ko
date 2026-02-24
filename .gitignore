@@ -1,0 +1,26 @@
+# Byte-compiled / Optimized / DLL Files
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+# Distribution / Packaging
+venv/
+
+# Unit Test
+.pytest_cache/
+
+# Ignore IDE, Editor Files
+.idea/
+.vscode/
+
+# Node modules
+electron-app/node_modules/
+
+# Electron build outputs
+electron-app/dist/
+electron-app/win-unpacked/
+
+# Faster Whisper binaries
+backend/faster-whisper/dist/
+backend/faster-whisper/build/
