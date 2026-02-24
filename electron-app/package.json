@@ -1,0 +1,24 @@
+{
+  "name": "ai-karaoke-transcriber",
+  "version": "1.0.0",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.aikaraoke.transcriber",
+    "productName": "AI Karaoke Transcriber",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
