@@ -714,7 +714,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border-b p-6">
+            <div className="bg-linear-to-r from-orange-50 to-yellow-50 border-b p-6">
               <div className="flex items-center space-x-4 mb-6">
                 <Maximize2 className="w-6 h-6 text-orange-600" />
                 <h3 className="text-xl font-semibold text-gray-800">Words Display Limit</h3>
@@ -767,7 +767,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-b p-6">
+            <div className="bg-linear-to-r from-blue-50 to-purple-50 border-b p-6">
               <div className="flex items-center space-x-4 mb-6">
                 <Type className="w-6 h-6 text-blue-600" />
                 <h3 className="text-xl font-semibold text-gray-800">Caption Style Settings</h3>

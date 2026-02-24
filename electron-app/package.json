@@ -1,15 +1,13 @@
 {
   "name": "ai-karaoke-transcriber",
   "version": "1.0.0",
+  "description": "AI Karaoke Transcriber Desktop App",
   "main": "main.js",
-  "private": true,
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win"
-  },
-  "devDependencies": {
-    "electron": "^30.0.0",
-    "electron-builder": "^24.13.3"
+    "build": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
   },
   "build": {
     "appId": "com.aikaraoke.transcriber",
@@ -17,8 +15,34 @@
     "directories": {
       "output": "dist"
     },
+    "extraResources": [
+      {
+        "from": "../backend/faster-whisper/dist/backend.exe",
+        "to": "backend/backend.exe"
+      },
+      {
+        "from": "../aicode/out",
+        "to": "frontend"
+      }
+    ],
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
     }
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
   }
 }
