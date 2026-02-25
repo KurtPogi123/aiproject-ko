@@ -1,12 +1,19 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_all
+
+datas = []
+binaries = [('ffmpeg.exe', '.'), ('avcodec-62.dll', '.'), ('avdevice-62.dll', '.'), ('avfilter-11.dll', '.'), ('avformat-62.dll', '.'), ('avutil-60.dll', '.'), ('swresample-6.dll', '.'), ('swscale-9.dll', '.')]
+hiddenimports = ['faster_whisper']
+tmp_ret = collect_all('faster_whisper')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
-    datas=[],
-    hiddenimports=[],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
