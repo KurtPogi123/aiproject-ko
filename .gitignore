@@ -14,8 +14,9 @@ venv/
 .idea/
 .vscode/
 
-# Node modules
+# Node modules 
 electron-app/node_modules/
+aicode/node_modules/
 
 # Electron build outputs
 electron-app/dist/
@@ -24,3 +25,21 @@ electron-app/win-unpacked/
 # Faster Whisper binaries
 backend/faster-whisper/dist/
 backend/faster-whisper/build/
+
+# FFmpeg DLLs (too large for GitHub, users must download separately)
+backend/faster-whisper/*.dll
+
+# Environment files
+.env
+.env.local
+aicode/.env.local
+
+# Next.js build outputs
+aicode/.next/
+aicode/out/
+
+# Temporary files
+*.tmp
+*.temp
+backend/faster-whisper/temp_*
+backend/faster-whisper/karaoke_*
