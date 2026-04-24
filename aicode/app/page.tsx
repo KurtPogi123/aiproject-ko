@@ -176,24 +176,35 @@ export default function Home() {
   };
 
   const saveWordEdit = () => {
-    if (!editingWord || !editedWordValue.trim()) {
+    if (!editingWord) {
       cancelWordEdit();
       return;
     }
 
+    const trimmed = editedWordValue.trim();
     const updatedWordSegments = [...wordSegments];
-    if (updatedWordSegments[editingWord.segmentIndex]?.words[editingWord.wordIndex]) {
-      updatedWordSegments[editingWord.segmentIndex].words[editingWord.wordIndex].word = " " + editedWordValue.trim();
-      
-      const segment = updatedWordSegments[editingWord.segmentIndex];
+    const segment = updatedWordSegments[editingWord.segmentIndex];
+
+    if (segment?.words[editingWord.wordIndex]) {
+      if (trimmed === "") {
+        segment.words.splice(editingWord.wordIndex, 1);
+      } else {
+        segment.words[editingWord.wordIndex].word = " " + trimmed;
+      }
+
       segment.segment_text = segment.words.map(w => w.word.trim()).join(' ');
-      
+
       setWordSegments(updatedWordSegments);
-      
+
       const newTranscript = updatedWordSegments
         .map(seg => seg.words.map(w => w.word.trim()).join(' '))
+        .filter(text => text.length > 0)
         .join(' ');
       setTranscript(newTranscript);
+
+      if (trimmed === "" && currentWord?.segmentIndex === editingWord.segmentIndex) {
+        setCurrentWord(null);
+      }
     }
 
     setEditingWord(null);
