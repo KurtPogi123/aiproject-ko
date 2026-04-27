@@ -169,6 +169,8 @@ async def create_advanced_word_karaoke(
     boxPaddingLeftRight: Optional[str] = Form("3"),
     selectedStyle: Optional[str] = Form("CORP"),
     windowSize: Optional[str] = Form("6"),
+    overlayX: Optional[str] = Form("50"),
+    overlayY: Optional[str] = Form("90"),
     editedWordSegments: Optional[str] = Form(None)
 ):
     input_path = tmp_path("karaoke_input", ".mp4")
@@ -218,7 +220,9 @@ async def create_advanced_word_karaoke(
             borderColor,
             highlightColor,
             int(boxPaddingLeftRight),
-            int(windowSize)
+            int(windowSize),
+            float(overlayX),
+            float(overlayY)
         )
 
         with open(subtitle_file, "w", encoding="utf-8") as f:
@@ -339,7 +343,9 @@ def create_word_level_ass_with_color_changes(
     border_color: str = "#1E40AF",
     highlight_color: str = "#FFFF00",
     box_padding_left_right: int = 15,
-    window_size: int = 6
+    window_size: int = 6,
+    overlay_x_pct: float = 50.0,
+    overlay_y_pct: float = 90.0
 ):
     font_name = get_font_name_for_ass(font_family)
     font_weight = 1 if font_family == "Aptos Black" else 0
@@ -361,6 +367,12 @@ def create_word_level_ass_with_color_changes(
     margin_v = 70
     margin_lr = 60
     letter_spacing = 2
+
+    play_res_x = 1920
+    play_res_y = 1080
+    pos_x = int(max(0.0, min(100.0, overlay_x_pct)) / 100.0 * play_res_x)
+    pos_y = int(max(0.0, min(100.0, overlay_y_pct)) / 100.0 * play_res_y)
+    pos_tag = f"{{\\an5\\pos({pos_x},{pos_y})}}"
 
     ass_header = f"""[Script Info]
 Title: Word-Level Karaoke
@@ -416,7 +428,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
             subtitle_text = " ".join(subtitle_parts)
             padding = " " * box_padding_left_right if not use_stroke else ""
-            final_text = f"{padding}{subtitle_text}{padding}"
+            final_text = f"{pos_tag}{padding}{subtitle_text}{padding}"
 
             word_start = format_ass_time(active_word["start"])
             word_end = format_ass_time(active_word["end"])

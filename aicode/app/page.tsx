@@ -76,6 +76,11 @@ export default function Home() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const videoBoxRef = useRef<HTMLDivElement>(null);
+
+  const [overlayPos, setOverlayPos] = useState<{ x: number; y: number }>({ x: 50, y: 90 });
+  const [isDraggingOverlay, setIsDraggingOverlay] = useState<boolean>(false);
+  const [videoPreviewHeight, setVideoPreviewHeight] = useState<number>(0);
 
   const availableFonts = [
     { name: 'Roboto', value: 'Roboto, sans-serif' },
@@ -87,12 +92,45 @@ export default function Home() {
     if (file && file.type.startsWith("video/")) {
       const url = URL.createObjectURL(file);
       setVideoUrl(url);
+      setOverlayPos({ x: 50, y: 90 });
       return () => {
         URL.revokeObjectURL(url);
         setVideoUrl(null);
       };
     }
   }, [file]);
+
+  useEffect(() => {
+    if (!videoBoxRef.current) return;
+    const el = videoBoxRef.current;
+    const update = () => setVideoPreviewHeight(el.getBoundingClientRect().height);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [videoUrl]);
+
+  useEffect(() => {
+    if (!isDraggingOverlay) return;
+    const handleMove = (e: MouseEvent) => {
+      if (!videoBoxRef.current) return;
+      const rect = videoBoxRef.current.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      setOverlayPos({
+        x: Math.max(0, Math.min(100, x)),
+        y: Math.max(0, Math.min(100, y)),
+      });
+    };
+    const handleUp = () => setIsDraggingOverlay(false);
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [isDraggingOverlay]);
 
   const handleTimeUpdate = () => {
     if (videoRef.current && segments.length > 0) {
@@ -273,7 +311,9 @@ export default function Home() {
     formData.append("highlightColor", fontSettings.highlightColor);
     formData.append("selectedStyle", selectedStyle);
     formData.append("windowSize", windowSize.toString());
-    
+    formData.append("overlayX", overlayPos.x.toString());
+    formData.append("overlayY", overlayPos.y.toString());
+
     if (wordSegments.length > 0) {
       formData.append("editedWordSegments", JSON.stringify(wordSegments));
     }
@@ -662,44 +702,99 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            <div className="p-6">
-              <div className="relative">
+            <div className="p-6 flex justify-center">
+              <div
+                ref={videoBoxRef}
+                className="relative"
+                style={{ width: 'fit-content', maxWidth: '100%' }}
+              >
                 <video
                   ref={videoRef}
                   src={videoUrl}
                   controls
-                  className="w-full rounded-xl shadow-md"
-                  style={{ maxHeight: "500px" }}
+                  className="block rounded-xl shadow-md"
+                  style={{ maxHeight: "600px", maxWidth: "100%" }}
                   onTimeUpdate={handleTimeUpdate}
                 />
-                
-                {file && file.type.startsWith("video/") && videoUrl && wordSegments.length > 0 && currentSegment >= 0 && (
-                  <div className="absolute bottom-4 left-0 right-0 text-center px-4">
-                    <div 
-                      className="inline-block px-6 py-4 rounded-lg"
-                      style={{ 
-                        fontFamily: availableFonts.find(f => f.name === fontSettings.fontFamily)?.value || 'sans-serif',
-                        fontSize: `${fontSettings.fontSize}px`,
-                        backgroundColor: fontSettings.backgroundColor,
-                        border: `4px solid ${fontSettings.borderColor}`,
-                        fontWeight: 'bold',
-                        ...getTextStyle(),
-                      }}
-                    >
-                      {getPreviewText().map((wordObj, idx) => (
-                        <span 
-                          key={idx}
-                          style={{
-                            color: wordObj.isActive ? fontSettings.highlightColor : fontSettings.textColor,
-                            transition: 'color 0.1s ease'
-                          }}
-                        >
-                          {wordObj.text}{idx < getPreviewText().length - 1 ? ' ' : ''}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+
+                {file && file.type.startsWith("video/") && videoUrl && wordSegments.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setOverlayPos({ x: 50, y: 90 })}
+                    className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white text-xs px-2 py-1 rounded z-10"
+                    title="Reset caption position"
+                  >
+                    ↺ Reset Position
+                  </button>
                 )}
+
+                {file && file.type.startsWith("video/") && videoUrl && wordSegments.length > 0 && currentSegment >= 0 && (() => {
+                  const scale = videoPreviewHeight > 0 ? videoPreviewHeight / 1080 : 0.3;
+                  const previewFontSize = fontSettings.fontSize * 3.5 * scale;
+                  const scaledStroke = fontSettings.strokeWidth * scale;
+                  const previewBorder = 4 * scale;
+                  const previewPadX = 24 * scale;
+                  const previewPadY = 16 * scale;
+                  const previewRadius = 8 * scale;
+                  const strokeShadow = fontSettings.useStroke
+                    ? `
+                        -${scaledStroke}px -${scaledStroke}px 0 ${fontSettings.strokeColor},
+                        ${scaledStroke}px -${scaledStroke}px 0 ${fontSettings.strokeColor},
+                        -${scaledStroke}px ${scaledStroke}px 0 ${fontSettings.strokeColor},
+                        ${scaledStroke}px ${scaledStroke}px 0 ${fontSettings.strokeColor},
+                        -${scaledStroke}px 0 0 ${fontSettings.strokeColor},
+                        ${scaledStroke}px 0 0 ${fontSettings.strokeColor},
+                        0 -${scaledStroke}px 0 ${fontSettings.strokeColor},
+                        0 ${scaledStroke}px 0 ${fontSettings.strokeColor}
+                      `
+                    : undefined;
+                  return (
+                    <div
+                      className="absolute"
+                      style={{
+                        left: `${overlayPos.x}%`,
+                        top: `${overlayPos.y}%`,
+                        transform: 'translate(-50%, -50%)',
+                        cursor: isDraggingOverlay ? 'grabbing' : 'grab',
+                        userSelect: 'none',
+                        touchAction: 'none',
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setIsDraggingOverlay(true);
+                      }}
+                      title="Drag to reposition"
+                    >
+                      <div
+                        className="inline-block whitespace-nowrap"
+                        style={{
+                          fontFamily: availableFonts.find(f => f.name === fontSettings.fontFamily)?.value || 'sans-serif',
+                          fontSize: `${previewFontSize}px`,
+                          padding: `${previewPadY}px ${previewPadX}px`,
+                          backgroundColor: fontSettings.backgroundColor,
+                          border: `${previewBorder}px solid ${fontSettings.borderColor}`,
+                          borderRadius: `${previewRadius}px`,
+                          fontWeight: 'bold',
+                          color: fontSettings.textColor,
+                          textShadow: strokeShadow,
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {getPreviewText().map((wordObj, idx) => (
+                          <span
+                            key={idx}
+                            style={{
+                              color: wordObj.isActive ? fontSettings.highlightColor : fontSettings.textColor,
+                              transition: 'color 0.1s ease'
+                            }}
+                          >
+                            {wordObj.text}{idx < getPreviewText().length - 1 ? ' ' : ''}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
